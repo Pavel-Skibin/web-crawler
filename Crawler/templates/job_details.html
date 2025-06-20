@@ -1,0 +1,508 @@
+{% extends "base.html" %}
+
+{% block title %}{{ job.job_name }} - Детали задания{% endblock %}
+
+{% block head %}
+<style>
+    .progress-card {
+        border-left: 4px solid #007bff;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .progress-card.running {
+        border-left-color: #ffc107;
+        background: linear-gradient(135deg, #fff9e6 0%, #ffffff 100%);
+    }
+
+    .progress-card.completed {
+        border-left-color: #28a745;
+        background: linear-gradient(135deg, #e8f5e8 0%, #ffffff 100%);
+    }
+
+    .progress-card.failed {
+        border-left-color: #dc3545;
+        background: linear-gradient(135deg, #fde8e8 0%, #ffffff 100%);
+    }
+
+    .spinner-custom {
+        width: 1.2rem;
+        height: 1.2rem;
+    }
+
+    .progress-info {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+
+    .current-url {
+        max-width: 100%;
+        word-break: break-all;
+        font-family: 'Courier New', monospace;
+        font-size: 0.8rem;
+        background: #f8f9fa;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        border: 1px solid #dee2e6;
+    }
+
+    .stats-card {
+        transition: transform 0.2s;
+    }
+
+    .stats-card:hover {
+        transform: translateY(-2px);
+    }
+
+    .pulse {
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.7; }
+        100% { opacity: 1; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1">{{ job.job_name }}</h2>
+        <p class="text-muted mb-0">
+            <i class="bi bi-link-45deg me-1"></i>
+            <a href="{{ job.start_url }}" target="_blank" class="text-decoration-none">{{ job.start_url }}</a>
+        </p>
+    </div>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Назад к списку
+    </a>
+</div>
+
+<!-- Карточка прогресса (показывается только для активных заданий) -->
+<div id="progress-card" class="card progress-card mb-4" style="display: none;">
+    <div class="card-header bg-transparent">
+        <h5 class="mb-0">
+            <span class="spinner-border spinner-border-sm spinner-custom me-2" id="progress-spinner"></span>
+            <span id="progress-title">Выполнение задания</span>
+        </h5>
+    </div>
+    <div class="card-body">
+        <!-- Progress Bar -->
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold">Прогресс выполнения:</span>
+                <span id="progress-percentage" class="badge bg-primary">0%</span>
+            </div>
+            <div class="progress" style="height: 20px;">
+                <div id="progress-bar"
+                     class="progress-bar progress-bar-striped progress-bar-animated"
+                     role="progressbar"
+                     style="width: 0%"
+                     aria-valuenow="0"
+                     aria-valuemin="0"
+                     aria-valuemax="100">
+                    <span id="progress-text">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Information -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <strong>Статус:</strong>
+                    <span id="current-status" class="badge bg-warning">Инициализация</span>
+                </div>
+
+                <div class="mb-3">
+                    <strong>Обработано страниц:</strong>
+                    <span id="pages-processed" class="fw-bold text-primary">0</span> из
+                    <span id="total-pages" class="fw-bold">0</span>
+                </div>
+
+                <div class="mb-3">
+                    <strong>Время выполнения:</strong>
+                    <span id="execution-time" class="fw-bold text-success">00:00:00</span>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <strong>Последнее обновление:</strong>
+                    <span id="last-update" class="text-muted">-</span>
+                </div>
+
+                <div class="mb-3">
+                    <strong>Текущая страница:</strong>
+                    <div id="current-url" class="current-url mt-1">Загрузка...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Message -->
+        <div class="alert alert-info mb-0" id="status-alert">
+            <i class="bi bi-info-circle me-2"></i>
+            <span id="progress-message">Инициализация краулера...</span>
+        </div>
+    </div>
+</div>
+
+<!-- Job Information and Results -->
+<div class="row">
+    <!-- Job Details -->
+    <div class="col-md-4">
+        <div class="card stats-card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-info-circle me-2"></i>Информация о задании
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>Статус:</strong>
+                    <span id="job-status" class="badge bg-{{ 'success' if job.status == 'completed' else 'warning' if job.status == 'running' else 'danger' }}">
+                        {{ job.status }}
+                    </span>
+                </div>
+
+                <div class="mb-3">
+                    <strong>Параметры краулинга:</strong>
+                    <ul class="list-unstyled mt-2 ms-3">
+                        <li><i class="bi bi-layers me-1"></i>Макс. страниц: {{ job.max_pages }}</li>
+                        <li><i class="bi bi-diagram-3 me-1"></i>Макс. глубина: {{ job.max_depth }}</li>
+                        <li><i class="bi bi-clock me-1"></i>Задержка: {{ job.delay }} сек</li>
+                    </ul>
+                </div>
+
+                <div class="mb-3">
+                    <strong>Временные метки:</strong>
+                    <ul class="list-unstyled mt-2 ms-3 progress-info">
+                        <li><i class="bi bi-calendar-plus me-1"></i>Создано: {{ job.created_at.strftime('%d.%m.%Y %H:%M') }}</li>
+                        {% if job.started_at %}
+                        <li><i class="bi bi-play-circle me-1"></i>Запущено: {{ job.started_at.strftime('%d.%m.%Y %H:%M') }}</li>
+                        {% endif %}
+                        {% if job.finished_at %}
+                        <li><i class="bi bi-check-circle me-1"></i>Завершено: {{ job.finished_at.strftime('%d.%m.%Y %H:%M') }}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+
+                <div class="mb-3">
+                    <strong>Результат:</strong>
+                    <div class="mt-2">
+                        <span class="badge bg-success fs-6" id="total-crawled">{{ job.pages_crawled or 0 }}</span>
+                        <span class="text-muted ms-1">страниц собрано</span>
+                    </div>
+                </div>
+
+                {% if job.username %}
+                <div class="mb-0">
+                    <strong>Пользователь:</strong>
+                    <span class="badge bg-secondary">{{ job.username }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Crawled Pages -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-collection me-2"></i>Собранные страницы
+                    (<span id="pages-count">{{ pages|length }}</span>)
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if pages %}
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm">
+                        <thead class="table-dark">
+                            <tr>
+                                <th width="40%">URL</th>
+                                <th width="25%">Заголовок</th>
+                                <th width="10%">Глубина</th>
+                                <th width="10%">Статус</th>
+                                <th width="10%">Слов</th>
+                                <th width="15%">Время</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pages-table">
+                            {% for page in pages %}
+                            <tr>
+                                <td>
+                                    <a href="{{ page.url }}" target="_blank"
+                                       title="{{ page.url }}"
+                                       class="text-decoration-none">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i>
+                                        {{ page.url[:40] }}{% if page.url|length > 40 %}...{% endif %}
+                                    </a>
+                                </td>
+                                <td title="{{ page.title }}">
+                                    {{ page.title[:25] }}{% if page.title|length > 25 %}...{% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-info">{{ page.depth }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if page.status_code == 200 else 'warning' }}">
+                                        {{ page.status_code }}
+                                    </span>
+                                </td>
+                                <td class="text-muted">{{ page.word_count or 0 }}</td>
+                                <td class="text-muted small">{{ page.crawled_at.strftime('%H:%M:%S') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox display-4 text-muted"></i>
+                    <p class="text-muted mt-3" id="no-pages-message">
+                        {% if job.status == 'running' %}
+                        Краулер работает... Страницы появятся здесь по мере обработки.
+                        {% else %}
+                        Пока нет собранных страниц
+                        {% endif %}
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// JavaScript для отслеживания прогресса
+class JobProgressTracker {
+    constructor(jobId, isJobActive) {
+        this.jobId = jobId;
+        this.isJobActive = isJobActive;
+        this.progressInterval = null;
+        this.startTime = null;
+        this.elements = this.getElements();
+
+        if (this.isJobActive) {
+            this.startTracking();
+        }
+    }
+
+    getElements() {
+        return {
+            progressCard: document.getElementById('progress-card'),
+            progressBar: document.getElementById('progress-bar'),
+            progressText: document.getElementById('progress-text'),
+            progressPercentage: document.getElementById('progress-percentage'),
+            progressSpinner: document.getElementById('progress-spinner'),
+            progressTitle: document.getElementById('progress-title'),
+            currentStatus: document.getElementById('current-status'),
+            currentUrl: document.getElementById('current-url'),
+            pagesProcessed: document.getElementById('pages-processed'),
+            totalPages: document.getElementById('total-pages'),
+            lastUpdate: document.getElementById('last-update'),
+            progressMessage: document.getElementById('progress-message'),
+            executionTime: document.getElementById('execution-time'),
+            jobStatus: document.getElementById('job-status'),
+            totalCrawled: document.getElementById('total-crawled'),
+            pagesCount: document.getElementById('pages-count'),
+            statusAlert: document.getElementById('status-alert'),
+            noPagesMessage: document.getElementById('no-pages-message')
+        };
+    }
+
+    startTracking() {
+        this.startTime = new Date();
+        this.updateProgress(); // Первый вызов сразу
+        this.progressInterval = setInterval(() => this.updateProgress(), 2000);
+
+        // Обновляем время выполнения каждую секунду
+        this.timeInterval = setInterval(() => this.updateExecutionTime(), 1000);
+    }
+
+    stopTracking() {
+        if (this.progressInterval) {
+            clearInterval(this.progressInterval);
+            this.progressInterval = null;
+        }
+        if (this.timeInterval) {
+            clearInterval(this.timeInterval);
+            this.timeInterval = null;
+        }
+    }
+
+    updateExecutionTime() {
+        if (this.startTime) {
+            const now = new Date();
+            const diff = now - this.startTime;
+            const hours = Math.floor(diff / 3600000);
+            const minutes = Math.floor((diff % 3600000) / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+
+            const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            if (this.elements.executionTime) {
+                this.elements.executionTime.textContent = timeString;
+            }
+        }
+    }
+
+    updateProgress() {
+        fetch(`/api/job/${this.jobId}/progress`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Ошибка получения прогресса:', data.error);
+                    return;
+                }
+
+                if (data.active) {
+                    this.updateActiveJob(data);
+                } else {
+                    this.updateInactiveJob(data);
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка запроса прогресса:', error);
+                this.handleError();
+            });
+    }
+
+    updateActiveJob(data) {
+        // Показываем карточку прогресса
+        if (this.elements.progressCard) {
+            this.elements.progressCard.style.display = 'block';
+            this.elements.progressCard.className = `card progress-card ${data.status}`;
+        }
+
+        // Обновляем прогресс-бар
+        const progress = Math.min(100, Math.max(0, data.progress));
+        if (this.elements.progressBar) {
+            this.elements.progressBar.style.width = progress + '%';
+            this.elements.progressBar.setAttribute('aria-valuenow', progress);
+        }
+        if (this.elements.progressText) {
+            this.elements.progressText.textContent = progress + '%';
+        }
+        if (this.elements.progressPercentage) {
+            this.elements.progressPercentage.textContent = progress + '%';
+        }
+
+        // Обновляем статус
+        if (this.elements.currentStatus) {
+            this.elements.currentStatus.textContent = this.getStatusText(data.status);
+            this.elements.currentStatus.className = `badge ${this.getStatusBadgeClass(data.status)}`;
+        }
+
+        // Обновляем информацию
+        if (this.elements.currentUrl) {
+            this.elements.currentUrl.textContent = data.current_url || 'Не указано';
+        }
+        if (this.elements.pagesProcessed) {
+            this.elements.pagesProcessed.textContent = data.pages_processed;
+        }
+        if (this.elements.totalPages) {
+            this.elements.totalPages.textContent = data.total_pages;
+        }
+        if (this.elements.lastUpdate) {
+            this.elements.lastUpdate.textContent = data.updated_at || 'Только что';
+        }
+        if (this.elements.progressMessage) {
+            this.elements.progressMessage.textContent = data.message;
+        }
+
+        // Обновляем статус задания в основной карточке
+        if (this.elements.jobStatus) {
+            this.elements.jobStatus.textContent = data.status;
+            this.elements.jobStatus.className = `badge ${this.getStatusBadgeClass(data.status)}`;
+        }
+
+        // Обновляем alert
+        if (this.elements.statusAlert) {
+            this.elements.statusAlert.className = `alert ${this.getAlertClass(data.status)} mb-0`;
+        }
+
+        // Если задание завершено, останавливаем обновления и обновляем страницу
+        if (data.status === 'completed' || data.status === 'failed') {
+            this.stopTracking();
+
+            if (this.elements.progressSpinner) {
+                this.elements.progressSpinner.style.display = 'none';
+            }
+            if (this.elements.progressTitle) {
+                this.elements.progressTitle.textContent = data.status === 'completed' ?
+                    'Задание завершено' : 'Задание завершено с ошибкой';
+            }
+
+            // Обновляем страницу через 3 секунды для загрузки результатов
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
+        }
+    }
+
+    updateInactiveJob(data) {
+        // Скрываем карточку прогресса
+        if (this.elements.progressCard) {
+            this.elements.progressCard.style.display = 'none';
+        }
+
+        if (this.isJobActive) {
+            // Было активно, но теперь нет - обновляем страницу
+            location.reload();
+        }
+    }
+
+    handleError() {
+        if (this.elements.progressMessage) {
+            this.elements.progressMessage.textContent = 'Ошибка получения данных о прогрессе';
+        }
+        if (this.elements.statusAlert) {
+            this.elements.statusAlert.className = 'alert alert-danger mb-0';
+        }
+    }
+
+    getStatusText(status) {
+        const statusMap = {
+            'starting': 'Запуск',
+            'running': 'Выполняется',
+            'processing': 'Обработка',
+            'completed': 'Завершено',
+            'failed': 'Ошибка'
+        };
+        return statusMap[status] || status;
+    }
+
+    getStatusBadgeClass(status) {
+        const classMap = {
+            'starting': 'bg-info',
+            'running': 'bg-warning',
+            'processing': 'bg-primary',
+            'completed': 'bg-success',
+            'failed': 'bg-danger'
+        };
+        return classMap[status] || 'bg-secondary';
+    }
+
+    getAlertClass(status) {
+        const classMap = {
+            'starting': 'alert-info',
+            'running': 'alert-warning',
+            'processing': 'alert-primary',
+            'completed': 'alert-success',
+            'failed': 'alert-danger'
+        };
+        return classMap[status] || 'alert-info';
+    }
+}
+
+// Инициализация отслеживания прогресса
+document.addEventListener('DOMContentLoaded', function() {
+    const isJobActive = {{ 'true' if job.status == 'running' else 'false' }};
+    const tracker = new JobProgressTracker({{ job.id }}, isJobActive);
+});
+</script>
+{% endblock %}

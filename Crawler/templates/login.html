@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Вход - Веб-краулер{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white text-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-box-arrow-in-right me-2"></i>Вход в систему
+                </h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" novalidate>
+                    <div class="mb-3">
+                        <label for="username" class="form-label">
+                            <i class="bi bi-person me-1"></i>Имя пользователя
+                        </label>
+                        <input type="text" class="form-control" id="username" name="username"
+                               required autocomplete="username" autofocus>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">
+                            <i class="bi bi-lock me-1"></i>Пароль
+                        </label>
+                        <input type="password" class="form-control" id="password" name="password"
+                               required autocomplete="current-password">
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-box-arrow-in-right me-1"></i>Войти
+                        </button>
+                    </div>
+                </form>
+
+                <hr>
+
+                <div class="text-center">
+                    <p class="mb-0">Нет аккаунта?</p>
+                    <a href="{{ url_for('register') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-person-plus me-1"></i>Зарегистрироваться
+                    </a>
+                </div>
+
+                <div class="mt-3 p-3 bg-light rounded">
+                    <small class="text-muted">
+                        <strong>Тестовые данные:</strong><br>
+                        Администратор: admin / admin<br>
+                        Или создайте новый аккаунт
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

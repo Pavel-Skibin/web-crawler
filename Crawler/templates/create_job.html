@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Создать задание{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">
+                    <i class="bi bi-plus-circle me-2"></i>Создать новое задание краулера
+                </h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" novalidate>
+                    <div class="mb-3">
+                        <label for="job_name" class="form-label">
+                            <i class="bi bi-tag me-1"></i>Название задания
+                        </label>
+                        <input type="text" class="form-control" id="job_name" name="job_name"
+                               required maxlength="100"
+                               placeholder="Например: Анализ новостного сайта">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="start_url" class="form-label">
+                            <i class="bi bi-link-45deg me-1"></i>Начальный URL
+                        </label>
+                        <input type="url" class="form-control" id="start_url" name="start_url"
+                               required placeholder="https://example.com">
+                        <div class="form-text">URL должен начинаться с http:// или https://</div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="max_pages" class="form-label">
+                                    <i class="bi bi-layers me-1"></i>Максимальное количество страниц
+                                </label>
+                                <input type="number" class="form-control" id="max_pages" name="max_pages"
+                                       min="1" max="{{ limits.max_pages_per_job if limits else 1000 }}"
+                                       value="20" required>
+                                {% if limits %}
+                                <div class="form-text">Максимум: {{ limits.max_pages_per_job }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="max_depth" class="form-label">
+                                    <i class="bi bi-diagram-3 me-1"></i>Максимальная глубина
+                                </label>
+                                <input type="number" class="form-control" id="max_depth" name="max_depth"
+                                       min="1" max="{{ limits.max_depth if limits else 10 }}"
+                                       value="2" required>
+                                {% if limits %}
+                                <div class="form-text">Максимум: {{ limits.max_depth }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="delay" class="form-label">
+                            <i class="bi bi-clock me-1"></i>Задержка между запросами (секунды)
+                        </label>
+                        <input type="number" class="form-control" id="delay" name="delay"
+                               step="0.1" min="{{ limits.min_delay if limits else 0.1 }}"
+                               max="10" value="0.5" required>
+                        {% if limits %}
+                        <div class="form-text">Минимум: {{ limits.min_delay }} сек</div>
+                        {% else %}
+                        <div class="form-text">Рекомендуется: 0.5 - 2.0 секунд</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Обратите внимание:</strong> Краулер будет обходить только страницы в пределах указанного домена.
+                        Уважайте robots.txt и не создавайте чрезмерную нагрузку на серверы.
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>Отмена
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-play-circle me-1"></i>Создать и запустить
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Валидация формы
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form');
+    const urlInput = document.getElementById('start_url');
+
+    // Проверка URL
+    urlInput.addEventListener('blur', function() {
+        const url = this.value;
+        if (url && !url.match(/^https?:\/\/.+/)) {
+            this.setCustomValidity('URL должен начинаться с http:// или https://');
+        } else {
+            this.setCustomValidity('');
+        }
+    });
+
+    // Показываем индикатор загрузки при отправке
+    form.addEventListener('submit', function() {
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Создание...';
+            submitBtn.disabled = true;
+        }
+    });
+});
+</script>
+{% endblock %}

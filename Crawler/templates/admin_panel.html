@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+
+{% block title %}Панель администратора{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2>Панель администратора</h2>
+        <p class="text-muted mb-0">Управление пользователями и мониторинг системы</p>
+    </div>
+    <div>
+        <span class="badge bg-danger fs-6">Режим администратора</span>
+    </div>
+</div>
+
+<!-- Statistics -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5>Пользователей</h5>
+                        <h3>{{ users|length }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-people fs-1 opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5>Всего заданий</h5>
+                        <h3>{{ jobs|length }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-list-task fs-1 opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5>Активных</h5>
+                        <h3>{{ jobs | selectattr('status', 'equalto', 'running') | list | length }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-arrow-repeat fs-1 opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5>Завершено</h5>
+                        <h3>{{ jobs | selectattr('status', 'equalto', 'completed') | list | length }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-check-circle fs-1 opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Users Management -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-people me-2"></i>Управление пользователями
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>ID</th>
+                                <th>Пользователь</th>
+                                <th>Роль</th>
+                                <th>Создан</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr>
+                                <td>{{ user.id }}</td>
+                                <td>
+                                    <i class="bi bi-person-circle me-1"></i>
+                                    {{ user.username }}
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ 'danger' if user.role == 'admin' else 'primary' }}">
+                                        {{ user.role }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <small>{{ user.created_at.strftime('%d.%m.%Y') }}</small>
+                                </td>
+                                <td>
+                                    {% if user.role != 'admin' %}
+                                    <a href="{{ url_for('delete_user', user_id=user.id) }}"
+                                       class="btn btn-sm btn-outline-danger"
+                                       onclick="return confirm('Удалить пользователя {{ user.username }}?')">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Jobs -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-clock-history me-2"></i>Последние задания
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Задание</th>
+                                <th>Пользователь</th>
+                                <th>Статус</th>
+                                <th>Создано</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for job in jobs[:10] %}
+                            <tr class="{% if job.status == 'running' %}table-warning{% endif %}">
+                                <td>
+                                    <a href="{{ url_for('job_details', job_id=job.id) }}"
+                                       class="text-decoration-none">
+                                        {{ job.job_name[:20] }}{% if job.job_name|length > 20 %}...{% endif %}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ job.username }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if job.status == 'completed' else 'warning' if job.status == 'running' else 'danger' }}">
+                                        {{ job.status }}
+                                    </span>
+                                    {% if job.status == 'running' %}
+                                    <div class="spinner-border spinner-border-sm ms-1" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small>{{ job.created_at.strftime('%d.%m %H:%M') }}</small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if jobs|length > 10 %}
+                <div class="text-center mt-3">
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-outline-primary">
+                        Показать все задания
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Statistics -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-bar-chart me-2"></i>Статистика системы
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h4 class="text-primary">{{ users | selectattr('role', 'equalto', 'user') | list | length }}</h4>
+                            <p class="text-muted mb-0">Обычных пользователей</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h4 class="text-success">{{ jobs | selectattr('status', 'equalto', 'completed') | list | length }}</h4>
+                            <p class="text-muted mb-0">Успешных заданий</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h4 class="text-danger">{{ jobs | selectattr('status', 'equalto', 'failed') | list | length }}</h4>
+                            <p class="text-muted mb-0">Заданий с ошибками</p>
+                        </div>
+                    </div>
+                </div>
+
+                {% if jobs %}
+                <hr>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Статистика по статусам заданий:</h6>
+                        <div class="progress mb-2" style="height: 25px;">
+                            {% set completed_count = jobs | selectattr('status', 'equalto', 'completed') | list | length %}
+                            {% set running_count = jobs | selectattr('status', 'equalto', 'running') | list | length %}
+                            {% set failed_count = jobs | selectattr('status', 'equalto', 'failed') | list | length %}
+                            {% set total_count = jobs | length %}
+
+                            {% if completed_count > 0 %}
+                            <div class="progress-bar bg-success" style="width: {{ (completed_count / total_count * 100) | round(1) }}%">
+                                {{ completed_count }} завершено
+                            </div>
+                            {% endif %}
+
+                            {% if running_count > 0 %}
+                            <div class="progress-bar bg-warning" style="width: {{ (running_count / total_count * 100) | round(1) }}%">
+                                {{ running_count }} активно
+                            </div>
+                            {% endif %}
+
+                            {% if failed_count > 0 %}
+                            <div class="progress-bar bg-danger" style="width: {{ (failed_count / total_count * 100) | round(1) }}%">
+                                {{ failed_count }} с ошибками
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Самые активные пользователи:</h6>
+                        <ul class="list-unstyled">
+                            {% for user in users[:5] %}
+                            {% set user_jobs_count = jobs | selectattr('username', 'equalto', user.username) | list | length %}
+                            {% if user_jobs_count > 0 %}
+                            <li class="d-flex justify-content-between">
+                                <span>{{ user.username }}</span>
+                                <span class="badge bg-primary">{{ user_jobs_count }} заданий</span>
+                            </li>
+                            {% endif %}
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -20,12 +20,9 @@
     </div>
 </div>
 
-
-
-<!-- Statistics Cards -->
 <div class="row mb-4">
     <div class="col-md-3">
-        <div class="card bg-primary text-white">
+        <div class="card bg-primary text-white stats-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
@@ -41,7 +38,7 @@
     </div>
 
     <div class="col-md-3">
-        <div class="card bg-warning text-white">
+        <div class="card bg-warning text-white stats-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
@@ -57,7 +54,7 @@
     </div>
 
     <div class="col-md-3">
-        <div class="card bg-success text-white">
+        <div class="card bg-success text-white stats-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
@@ -73,7 +70,7 @@
     </div>
 
     <div class="col-md-3">
-        <div class="card bg-danger text-white">
+        <div class="card bg-danger text-white stats-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
@@ -89,13 +86,11 @@
     </div>
 </div>
 
-<!-- Active Jobs Alert -->
-<div id="active-jobs-alert" style="display: none;" class="alert alert-info">
+<div id="active-jobs-alert" class="alert alert-info d-none">
     <i class="bi bi-info-circle me-2"></i>
     <span id="active-jobs-text">У вас есть активные задания. Прогресс обновляется автоматически.</span>
 </div>
 
-<!-- Jobs Table -->
 <div class="card">
     <div class="card-header">
         <h5 class="mb-0">
@@ -154,7 +149,7 @@
                         </td>
                         <td>
                             {% if job.status == 'running' %}
-                            <div class="progress" style="height: 20px;">
+                            <div class="progress job-progress">
                                 <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning"
                                      id="progress-{{ job.id }}"
                                      role="progressbar"
@@ -184,10 +179,9 @@
                                     <i class="bi bi-eye me-1"></i>Детали
                                 </a>
 
-                                <!-- Кнопка удаления -->
                                 <button type="button"
                                         class="btn btn-sm btn-outline-danger"
-                                        onclick="confirmDelete({{ job.id }}, '{{ job.job_name }}')">
+                                        onclick="Dashboard.confirmDelete({{ job.id }}, '{{ job.job_name }}')">
                                     <i class="bi bi-trash me-1"></i>Удалить
                                 </button>
                             </div>
@@ -210,7 +204,6 @@
     </div>
 </div>
 
-<!-- Модальное окно подтверждения удаления -->
 <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -233,7 +226,7 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <i class="bi bi-x-circle me-1"></i>Отмена
                 </button>
-                <form id="deleteJobForm" method="POST" style="display: inline;">
+                <form id="deleteJobForm" method="POST" class="d-inline">
                     <button type="submit" class="btn btn-danger">
                         <i class="bi bi-trash me-1"></i>Удалить задание
                     </button>
@@ -245,131 +238,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-// Обновление прогресса активных заданий на dashboard
-class DashboardProgressTracker {
-    constructor() {
-        this.activeJobs = new Set();
-        this.updateInterval = null;
-        this.init();
-    }
-
-    init() {
-        // Находим все активные задания
-        document.querySelectorAll('tr[data-job-id]').forEach(row => {
-            const statusBadge = row.querySelector('.badge');
-            if (statusBadge && statusBadge.textContent.trim() === 'running') {
-                const jobId = row.getAttribute('data-job-id');
-                this.activeJobs.add(parseInt(jobId));
-            }
-        });
-
-        if (this.activeJobs.size > 0) {
-            this.showActiveJobsAlert();
-            this.startTracking();
-        }
-    }
-
-    showActiveJobsAlert() {
-        const alert = document.getElementById('active-jobs-alert');
-        const text = document.getElementById('active-jobs-text');
-        if (alert && text) {
-            const count = this.activeJobs.size;
-            text.textContent = `У вас ${count} активных заданий. Прогресс обновляется автоматически.`;
-            alert.style.display = 'block';
-        }
-    }
-
-    startTracking() {
-        this.updateProgress();
-        this.updateInterval = setInterval(() => this.updateProgress(), 5000);
-    }
-
-    updateProgress() {
-        this.activeJobs.forEach(jobId => {
-            fetch(`/api/job/${jobId}/progress`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.active) {
-                        this.updateJobRow(jobId, data);
-                    } else {
-                        // Задание больше не активно
-                        this.activeJobs.delete(jobId);
-                        if (this.activeJobs.size === 0) {
-                            this.stopTracking();
-                            location.reload(); // Обновляем страницу
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error(`Ошибка получения прогресса для задания ${jobId}:`, error);
-                });
-        });
-    }
-
-    updateJobRow(jobId, data) {
-        const row = document.querySelector(`tr[data-job-id="${jobId}"]`);
-        if (!row) return;
-
-        // Обновляем прогресс-бар
-        const progressBar = document.getElementById(`progress-${jobId}`);
-        if (progressBar) {
-            const progress = Math.min(100, Math.max(0, data.progress));
-            progressBar.style.width = progress + '%';
-            progressBar.innerHTML = `<small>${progress}%</small>`;
-        }
-
-        // Обновляем количество активных заданий в статистике
-        const runningJobsElement = document.getElementById('running-jobs');
-        if (runningJobsElement) {
-            runningJobsElement.textContent = this.activeJobs.size;
-        }
-    }
-
-    stopTracking() {
-        if (this.updateInterval) {
-            clearInterval(this.updateInterval);
-            this.updateInterval = null;
-        }
-
-        // Скрываем alert
-        const alert = document.getElementById('active-jobs-alert');
-        if (alert) {
-            alert.style.display = 'none';
-        }
-    }
-}
-
-// Функция подтверждения удаления
-function confirmDelete(jobId, jobName) {
-    // Устанавливаем название задания в модальном окне
-    document.getElementById('jobNameToDelete').textContent = jobName;
-
-    // Устанавливаем action для формы
-    const deleteForm = document.getElementById('deleteJobForm');
-    deleteForm.action = `/job/${jobId}/delete`;
-
-    // Показываем модальное окно
-    const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
-    modal.show();
-}
-
-// Инициализация при загрузке страницы
-document.addEventListener('DOMContentLoaded', function() {
-    // Обработка отправки формы удаления
-    const deleteForm = document.getElementById('deleteJobForm');
-    if (deleteForm) {
-        deleteForm.addEventListener('submit', function(e) {
-            const submitBtn = this.querySelector('button[type="submit"]');
-            if (submitBtn) {
-                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Удаление...';
-                submitBtn.disabled = true;
-            }
-        });
-    }
-
-    // Инициализация трекера прогресса
-    new DashboardProgressTracker();
-});
-</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}

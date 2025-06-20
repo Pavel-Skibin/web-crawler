@@ -16,7 +16,6 @@
     </div>
 </div>
 
-<!-- Statistics -->
 <div class="row mb-4">
     <div class="col-md-3">
         <div class="card bg-info text-white">
@@ -84,7 +83,6 @@
 </div>
 
 <div class="row">
-    <!-- Users Management -->
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
@@ -93,7 +91,6 @@
                 </h5>
             </div>
             <div class="card-body">
-                <!-- Форма создания пользователя -->
                 <div class="mb-3">
                     <button class="btn btn-success btn-sm" data-bs-toggle="collapse" data-bs-target="#createUserForm">
                         <i class="bi bi-plus-circle me-1"></i>Создать пользователя
@@ -166,9 +163,8 @@
                             </td>
                             <td>
                                 <div class="btn-group btn-group-sm" role="group">
-                                    <!-- Кнопка изменения роли -->
                                     {% if user.username != 'admin' and user.id != session.get('user_id') %}
-                                    <form method="POST" action="{{ url_for('admin_toggle_role', user_id=user.id) }}" style="display: inline;">
+                                    <form method="POST" action="{{ url_for('admin_toggle_role', user_id=user.id) }}" class="d-inline">
                                         <button type="submit"
                                                 class="btn btn-outline-{{ 'warning' if user.role == 'user' else 'info' }}"
                                                 onclick="return confirm('{{ 'Назначить администратором' if user.role == 'user' else 'Снять права администратора' }} для пользователя {{ user.username }}?')"
@@ -178,10 +174,9 @@
                                     </form>
                                     {% endif %}
 
-                                    <!-- Кнопка удаления -->
                                     {% if user.role != 'admin' or (user.role == 'admin' and user.username != 'admin') %}
                                     {% if user.id != session.get('user_id') %}
-                                    <form method="POST" action="{{ url_for('admin_delete_user', user_id=user.id) }}" style="display: inline;">
+                                    <form method="POST" action="{{ url_for('admin_delete_user', user_id=user.id) }}" class="d-inline">
                                         <button type="submit"
                                                 class="btn btn-outline-danger"
                                                 onclick="return confirm('Удалить пользователя {{ user.username }}? Это действие нельзя отменить!')"
@@ -192,7 +187,6 @@
                                     {% endif %}
                                     {% endif %}
 
-                                    <!-- Если это текущий пользователь или системный админ -->
                                     {% if user.id == session.get('user_id') %}
                                     <span class="text-muted small">
                                         <i class="bi bi-person-check me-1"></i>Это вы
@@ -213,7 +207,6 @@
         </div>
     </div>
 
-    <!-- Recent Jobs -->
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
@@ -236,8 +229,7 @@
                         {% for job in jobs[:10] %}
                         <tr class="{% if job.status == 'running' %}table-warning{% endif %}">
                             <td>
-                                <a href="{{ url_for('job_details', job_id=job.id) }}"
-                                   class="text-decoration-none">
+                                <a href="{{ url_for('job_details', job_id=job.id) }}" class="text-decoration-none">
                                     {{ job.job_name[:20] }}{% if job.job_name|length > 20 %}...{% endif %}
                                 </a>
                             </td>
@@ -275,7 +267,6 @@
     </div>
 </div>
 
-<!-- System Statistics -->
 <div class="row mt-4">
     <div class="col-12">
         <div class="card">
@@ -311,7 +302,7 @@
                 <div class="row">
                     <div class="col-md-6">
                         <h6>Статистика по статусам заданий:</h6>
-                        <div class="progress mb-2" style="height: 25px;">
+                        <div class="progress mb-2 job-stats-progress">
                             {% set completed_count = jobs | selectattr('status', 'equalto', 'completed') | list | length %}
                             {% set running_count = jobs | selectattr('status', 'equalto', 'running') | list | length %}
                             {% set failed_count = jobs | selectattr('status', 'equalto', 'failed') | list | length %}

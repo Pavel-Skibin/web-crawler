@@ -12,7 +12,7 @@
                 </h4>
             </div>
             <div class="card-body">
-                <form method="POST" novalidate>
+                <form method="POST" novalidate id="createJobForm">
                     <div class="mb-3">
                         <label for="job_name" class="form-label">
                             <i class="bi bi-tag me-1"></i>Название задания
@@ -94,31 +94,8 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
-<script>
-// Валидация формы
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.querySelector('form');
-    const urlInput = document.getElementById('start_url');
-
-    // Проверка URL
-    urlInput.addEventListener('blur', function() {
-        const url = this.value;
-        if (url && !url.match(/^https?:\/\/.+/)) {
-            this.setCustomValidity('URL должен начинаться с http:// или https://');
-        } else {
-            this.setCustomValidity('');
-        }
-    });
-
-    // Показываем индикатор загрузки при отправке
-    form.addEventListener('submit', function() {
-        const submitBtn = form.querySelector('button[type="submit"]');
-        if (submitBtn) {
-            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Создание...';
-            submitBtn.disabled = true;
-        }
-    });
-});
-</script>
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/create-job.js') }}"></script>
 {% endblock %}

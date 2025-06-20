@@ -2,76 +2,6 @@
 
 {% block title %}{{ job.job_name }} - Детали задания{% endblock %}
 
-{% block head %}
-<style>
-    .progress-card {
-        border-left: 4px solid #007bff;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-
-    .progress-card.running {
-        border-left-color: #ffc107;
-        background: linear-gradient(135deg, #fff9e6 0%, #ffffff 100%);
-    }
-
-    .progress-card.completed {
-        border-left-color: #28a745;
-        background: linear-gradient(135deg, #e8f5e8 0%, #ffffff 100%);
-    }
-
-    .progress-card.failed {
-        border-left-color: #dc3545;
-        background: linear-gradient(135deg, #fde8e8 0%, #ffffff 100%);
-    }
-
-    .spinner-custom {
-        width: 1.2rem;
-        height: 1.2rem;
-    }
-
-    .progress-info {
-        font-size: 0.9rem;
-        color: #6c757d;
-    }
-
-    .current-url {
-        max-width: 100%;
-        word-break: break-all;
-        font-family: 'Courier New', monospace;
-        font-size: 0.8rem;
-        background: #f8f9fa;
-        padding: 0.25rem 0.5rem;
-        border-radius: 0.25rem;
-        border: 1px solid #dee2e6;
-    }
-
-    .stats-card {
-        transition: transform 0.2s;
-    }
-
-    .stats-card:hover {
-        transform: translateY(-2px);
-    }
-
-    .pulse {
-        animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-        0% { opacity: 1; }
-        50% { opacity: 0.7; }
-        100% { opacity: 1; }
-    }
-
-    .export-section {
-        background: #f8f9fa;
-        border-radius: 0.375rem;
-        padding: 0.75rem;
-        border: 1px solid #dee2e6;
-    }
-</style>
-{% endblock %}
-
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
@@ -88,14 +18,13 @@
 
         <button type="button"
                 class="btn btn-outline-danger"
-                onclick="confirmDelete({{ job.id }}, '{{ job.job_name }}')">
+                onclick="JobDetails.confirmDelete({{ job.id }}, '{{ job.job_name }}')">
             <i class="bi bi-trash me-1"></i>Удалить задание
         </button>
     </div>
 </div>
 
-<!-- Карточка прогресса (показывается только для активных заданий) -->
-<div id="progress-card" class="card progress-card mb-4" style="display: none;">
+<div id="progress-card" class="card progress-card mb-4 d-none">
     <div class="card-header bg-transparent">
         <h5 class="mb-0">
             <span class="spinner-border spinner-border-sm spinner-custom me-2" id="progress-spinner"></span>
@@ -103,13 +32,12 @@
         </h5>
     </div>
     <div class="card-body">
-        <!-- Progress Bar -->
         <div class="mb-3">
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="fw-bold">Прогресс выполнения:</span>
                 <span id="progress-percentage" class="badge bg-primary">0%</span>
             </div>
-            <div class="progress" style="height: 20px;">
+            <div class="progress job-progress-main">
                 <div id="progress-bar"
                      class="progress-bar progress-bar-striped progress-bar-animated"
                      role="progressbar"
@@ -122,7 +50,6 @@
             </div>
         </div>
 
-        <!-- Status Information -->
         <div class="row">
             <div class="col-md-6">
                 <div class="mb-3">
@@ -155,7 +82,6 @@
             </div>
         </div>
 
-        <!-- Status Message -->
         <div class="alert alert-info mb-0" id="status-alert">
             <i class="bi bi-info-circle me-2"></i>
             <span id="progress-message">Инициализация краулера...</span>
@@ -163,9 +89,7 @@
     </div>
 </div>
 
-<!-- Job Information and Results -->
 <div class="row">
-    <!-- Job Details -->
     <div class="col-md-4">
         <div class="card stats-card">
             <div class="card-header">
@@ -211,13 +135,12 @@
                     </div>
                 </div>
 
-                <!-- Экспорт данных -->
                 <div class="mb-3">
                     <strong>Экспорт данных:</strong>
                     <div class="export-section mt-2">
                         {% if job.status == 'completed' and job.pages_crawled and job.pages_crawled > 0 %}
                         <div class="d-grid gap-2">
-                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="previewExport()">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="JobDetails.previewExport()">
                                 <i class="bi bi-eye me-1"></i>Превью данных
                             </button>
                             <a href="{{ url_for('export_job_data', job_id=job.id) }}" class="btn btn-sm btn-success">
@@ -259,7 +182,6 @@
         </div>
     </div>
 
-    <!-- Crawled Pages -->
     <div class="col-md-8">
         <div class="card">
             <div class="card-header">
@@ -367,7 +289,6 @@
     </div>
 </div>
 
-<!-- Модальное окно для превью экспорта -->
 <div class="modal fade" id="exportPreviewModal" tabindex="-1" aria-labelledby="exportPreviewModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
@@ -399,7 +320,6 @@
     </div>
 </div>
 
-<!-- Модальное окно подтверждения удаления -->
 <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -422,7 +342,7 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <i class="bi bi-x-circle me-1"></i>Отмена
                 </button>
-                <form id="deleteJobForm" method="POST" style="display: inline;">
+                <form id="deleteJobForm" method="POST" class="d-inline">
                     <button type="submit" class="btn btn-danger">
                         <i class="bi bi-trash me-1"></i>Удалить задание
                     </button>
@@ -434,446 +354,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-// JavaScript для отслеживания прогресса
-class JobProgressTracker {
-    constructor(jobId, isJobActive) {
-        this.jobId = jobId;
-        this.isJobActive = isJobActive;
-        this.progressInterval = null;
-        this.timeInterval = null;
-        this.startTime = null;
-        this.elements = this.getElements();
-
-        if (this.isJobActive) {
-            this.startTracking();
-        }
-    }
-
-    getElements() {
-        return {
-            progressCard: document.getElementById('progress-card'),
-            progressBar: document.getElementById('progress-bar'),
-            progressText: document.getElementById('progress-text'),
-            progressPercentage: document.getElementById('progress-percentage'),
-            progressSpinner: document.getElementById('progress-spinner'),
-            progressTitle: document.getElementById('progress-title'),
-            currentStatus: document.getElementById('current-status'),
-            currentUrl: document.getElementById('current-url'),
-            pagesProcessed: document.getElementById('pages-processed'),
-            totalPages: document.getElementById('total-pages'),
-            lastUpdate: document.getElementById('last-update'),
-            progressMessage: document.getElementById('progress-message'),
-            executionTime: document.getElementById('execution-time'),
-            jobStatus: document.getElementById('job-status'),
-            totalCrawled: document.getElementById('total-crawled'),
-            pagesCount: document.getElementById('pages-count'),
-            statusAlert: document.getElementById('status-alert'),
-            noPagesMessage: document.getElementById('no-pages-message')
-        };
-    }
-
-    startTracking() {
-        this.startTime = new Date();
-        this.updateProgress(); // Первый вызов сразу
-        this.progressInterval = setInterval(() => this.updateProgress(), 2000);
-
-        // Обновляем время выполнения каждую секунду
-        this.timeInterval = setInterval(() => this.updateExecutionTime(), 1000);
-    }
-
-    stopTracking() {
-        if (this.progressInterval) {
-            clearInterval(this.progressInterval);
-            this.progressInterval = null;
-        }
-        if (this.timeInterval) {
-            clearInterval(this.timeInterval);
-            this.timeInterval = null;
-        }
-    }
-
-    updateExecutionTime() {
-        if (this.startTime && this.elements.executionTime) {
-            const now = new Date();
-            const diff = now - this.startTime;
-            const hours = Math.floor(diff / 3600000);
-            const minutes = Math.floor((diff % 3600000) / 60000);
-            const seconds = Math.floor((diff % 60000) / 1000);
-
-            const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            this.elements.executionTime.textContent = timeString;
-        }
-    }
-
-    updateProgress() {
-        fetch(`/api/job/${this.jobId}/progress`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    console.error('Ошибка получения прогресса:', data.error);
-                    this.handleError('Ошибка получения прогресса: ' + data.error);
-                    return;
-                }
-
-                if (data.active) {
-                    this.updateActiveJob(data);
-                } else {
-                    this.updateInactiveJob(data);
-                }
-            })
-            .catch(error => {
-                console.error('Ошибка запроса прогресса:', error);
-                this.handleError('Ошибка соединения с сервером');
-            });
-    }
-
-    updateActiveJob(data) {
-        // Показываем карточку прогресса
-        if (this.elements.progressCard) {
-            this.elements.progressCard.style.display = 'block';
-            this.elements.progressCard.className = `card progress-card ${data.status || 'running'}`;
-        }
-
-        // Обновляем прогресс-бар
-        const progress = Math.min(100, Math.max(0, data.progress || 0));
-        if (this.elements.progressBar) {
-            this.elements.progressBar.style.width = progress + '%';
-            this.elements.progressBar.setAttribute('aria-valuenow', progress);
-        }
-        if (this.elements.progressText) {
-            this.elements.progressText.textContent = progress + '%';
-        }
-        if (this.elements.progressPercentage) {
-            this.elements.progressPercentage.textContent = progress + '%';
-        }
-
-        // Обновляем статус
-        if (this.elements.currentStatus) {
-            this.elements.currentStatus.textContent = this.getStatusText(data.status);
-            this.elements.currentStatus.className = `badge ${this.getStatusBadgeClass(data.status)}`;
-        }
-
-        // Обновляем информацию
-        if (this.elements.currentUrl) {
-            this.elements.currentUrl.textContent = data.current_url || 'Не указано';
-        }
-        if (this.elements.pagesProcessed) {
-            this.elements.pagesProcessed.textContent = data.pages_processed || 0;
-        }
-        if (this.elements.totalPages) {
-            this.elements.totalPages.textContent = data.total_pages || 0;
-        }
-        if (this.elements.lastUpdate) {
-            this.elements.lastUpdate.textContent = data.updated_at || 'Только что';
-        }
-        if (this.elements.progressMessage) {
-            this.elements.progressMessage.textContent = data.message || 'Выполнение задания...';
-        }
-
-        // Обновляем статус задания в основной карточке
-        if (this.elements.jobStatus) {
-            this.elements.jobStatus.textContent = data.status || 'running';
-            this.elements.jobStatus.className = `badge ${this.getStatusBadgeClass(data.status)}`;
-        }
-
-        // Обновляем alert
-        if (this.elements.statusAlert) {
-            this.elements.statusAlert.className = `alert ${this.getAlertClass(data.status)} mb-0`;
-        }
-
-        // Если задание завершено, останавливаем обновления и обновляем страницу
-        if (data.status === 'completed' || data.status === 'failed') {
-            this.stopTracking();
-
-            if (this.elements.progressSpinner) {
-                this.elements.progressSpinner.style.display = 'none';
-            }
-            if (this.elements.progressTitle) {
-                this.elements.progressTitle.textContent = data.status === 'completed' ?
-                    'Задание завершено успешно' : 'Задание завершено с ошибкой';
-            }
-
-            // Показываем уведомление о завершении
-            this.showCompletionNotification(data.status === 'completed');
-
-            // Обновляем страницу через 3 секунды для загрузки результатов
-            setTimeout(() => {
-                location.reload();
-            }, 3000);
-        }
-    }
-
-    updateInactiveJob(data) {
-        // Скрываем карточку прогресса
-        if (this.elements.progressCard) {
-            this.elements.progressCard.style.display = 'none';
-        }
-
-        if (this.isJobActive) {
-            // Было активно, но теперь нет - обновляем страницу
-            location.reload();
-        }
-    }
-
-    handleError(message) {
-        if (this.elements.progressMessage) {
-            this.elements.progressMessage.textContent = message;
-        }
-        if (this.elements.statusAlert) {
-            this.elements.statusAlert.className = 'alert alert-danger mb-0';
-        }
-    }
-
-    showCompletionNotification(isSuccess) {
-        // Создаем временное уведомление
-        const notification = document.createElement('div');
-        notification.className = `alert alert-${isSuccess ? 'success' : 'danger'} alert-dismissible fade show position-fixed`;
-        notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-        notification.innerHTML = `
-            <i class="bi bi-${isSuccess ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
-            <strong>Задание ${isSuccess ? 'завершено успешно' : 'завершено с ошибкой'}!</strong>
-            <br><small>Страница обновится через несколько секунд...</small>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-
-        document.body.appendChild(notification);
-
-        // Удаляем уведомление через 5 секунд
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 5000);
-    }
-
-    getStatusText(status) {
-        const statusMap = {
-            'starting': 'Запуск',
-            'running': 'Выполняется',
-            'processing': 'Обработка',
-            'completed': 'Завершено',
-            'failed': 'Ошибка'
-        };
-        return statusMap[status] || status || 'Неизвестно';
-    }
-
-    getStatusBadgeClass(status) {
-        const classMap = {
-            'starting': 'bg-info',
-            'running': 'bg-warning',
-            'processing': 'bg-primary',
-            'completed': 'bg-success',
-            'failed': 'bg-danger'
-        };
-        return classMap[status] || 'bg-secondary';
-    }
-
-    getAlertClass(status) {
-        const classMap = {
-            'starting': 'alert-info',
-            'running': 'alert-warning',
-            'processing': 'alert-primary',
-            'completed': 'alert-success',
-            'failed': 'alert-danger'
-        };
-        return classMap[status] || 'alert-info';
-    }
-}
-
-// Функции для экспорта данных
-function previewExport() {
-    const modal = new bootstrap.Modal(document.getElementById('exportPreviewModal'));
-    const content = document.getElementById('export-preview-content');
-
-    // Показываем модальное окно с загрузкой
-    modal.show();
-
-    // Сбрасываем содержимое
-    content.innerHTML = `
-        <div class="text-center py-4">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Загрузка...</span>
-            </div>
-            <p class="mt-3 text-muted">Подготовка данных для экспорта...</p>
-        </div>
-    `;
-
-    // Запрашиваем превью данных
-    fetch(`/job/{{ job.id }}/export/preview`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                content.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="bi bi-exclamation-triangle me-2"></i>
-                        <strong>Ошибка:</strong> ${data.error}
-                    </div>
-                `;
-                return;
-            }
-
-            // Отображаем превью
-            content.innerHTML = `
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <div class="card border-primary">
-                            <div class="card-header bg-primary text-white">
-                                <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Информация о задании</h6>
-                            </div>
-                            <div class="card-body">
-                                <ul class="list-unstyled mb-0">
-                                    <li><strong>Название:</strong> ${data.job_info.name}</li>
-                                    <li><strong>Статус:</strong> <span class="badge bg-success">${data.job_info.status}</span></li>
-                                    <li><strong>Создано:</strong> ${new Date(data.job_info.created_at).toLocaleString('ru-RU')}</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="card border-success">
-                            <div class="card-header bg-success text-white">
-                                <h6 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Статистика данных</h6>
-                            </div>
-                            <div class="card-body">
-                                <ul class="list-unstyled mb-0">
-                                    <li><strong>Страниц:</strong> <span class="badge bg-primary">${data.job_info.total_pages}</span></li>
-                                    <li><strong>Ссылок:</strong> <span class="badge bg-info">${data.job_info.total_links}</span></li>
-                                    <li><strong>Размер файла:</strong> <span class="badge bg-warning text-dark">~${data.data_size_estimate}</span></li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                ${data.sample_pages && data.sample_pages.length > 0 ? `
-                <div class="card">
-                    <div class="card-header">
-                        <h6 class="mb-0"><i class="bi bi-eye me-2"></i>Пример данных (первые 3 страницы)</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-sm table-hover">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>URL</th>
-                                        <th>Заголовок</th>
-                                        <th>Статус</th>
-                                        <th>Слов</th>
-                                        <th>Ссылок</th>
-                                        <th>Глубина</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${data.sample_pages.map(page => `
-                                        <tr>
-                                            <td>
-                                                <a href="${page.url}" target="_blank" class="text-decoration-none" title="${page.url}">
-                                                    <i class="bi bi-box-arrow-up-right me-1"></i>
-                                                    ${page.url.length > 40 ? page.url.substring(0, 40) + '...' : page.url}
-                                                </a>
-                                            </td>
-                                            <td title="${page.title || ''}">
-                                                ${page.title ? (page.title.length > 30 ? page.title.substring(0, 30) + '...' : page.title) : '<span class="text-muted">-</span>'}
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-${page.status_code === 200 ? 'success' : (page.status_code >= 300 && page.status_code < 400) ? 'warning' : 'danger'}">
-                                                    ${page.status_code}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-light text-dark">${page.content?.word_count || 0}</span>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-light text-dark">${page.links?.length || 0}</span>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-info">${page.depth}</span>
-                                            </td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                ` : '<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Нет данных для предварительного просмотра</div>'}
-
-                <div class="alert alert-light border mt-4">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <h6><i class="bi bi-file-earmark-code me-2"></i>Структура JSON файла</h6>
-                            <ul class="mb-0 small">
-                                <li><strong>export_info</strong> - информация об экспорте (дата, пользователь, версия)</li>
-                                <li><strong>job_info</strong> - полная информация о задании и параметрах</li>
-                                <li><strong>crawled_data.pages</strong> - все собранные страницы с метаданными</li>
-                                <li><strong>crawled_data.links</strong> - граф всех найденных ссылок</li>
-                            </ul>
-                        </div>
-                        <div class="col-md-4 text-center">
-                            <i class="bi bi-download display-4 text-success"></i>
-                            <p class="small text-muted mt-2">Готов к скачиванию</p>
-                        </div>
-                    </div>
-                </div>
-            `;
-        })
-        .catch(error => {
-            console.error('Ошибка получения превью:', error);
-            content.innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
-                    <strong>Ошибка загрузки данных</strong><br>
-                    <small>Попробуйте обновить страницу или обратитесь к администратору</small>
-                </div>
-            `;
-        });
-}
-
-// Функция подтверждения удаления
-function confirmDelete(jobId, jobName) {
-    // Устанавливаем название задания в модальном окне
-    document.getElementById('jobNameToDelete').textContent = jobName;
-
-    // Устанавливаем action для формы
-    const deleteForm = document.getElementById('deleteJobForm');
-    deleteForm.action = `/job/${jobId}/delete`;
-
-    // Показываем модальное окно
-    const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
-    modal.show();
-}
-
-// Инициализация отслеживания прогресса
-document.addEventListener('DOMContentLoaded', function() {
-    const isJobActive = {{ 'true' if job.status == 'running' else 'false' }};
-    const tracker = new JobProgressTracker({{ job.id }}, isJobActive);
-
-    // Обработка отправки формы удаления
-    const deleteForm = document.getElementById('deleteJobForm');
-    if (deleteForm) {
-        deleteForm.addEventListener('submit', function(e) {
-            const submitBtn = this.querySelector('button[type="submit"]');
-            if (submitBtn) {
-                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Удаление...';
-                submitBtn.disabled = true;
-            }
-        });
-    }
-
-    // Добавляем обработчики для улучшения UX
-    const exportButtons = document.querySelectorAll('a[href*="export"]');
-    exportButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const icon = this.querySelector('i');
-            const originalClass = icon.className;
-            icon.className = 'bi bi-arrow-down-circle-fill me-1';
-
-            setTimeout(() => {
-                icon.className = originalClass;
-            }, 2000);
-        });
-    });
-});
-</script>
+<script src="{{ url_for('static', filename='js/job-details.js') }}"></script>
 {% endblock %}

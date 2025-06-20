@@ -17,7 +17,6 @@ import sys
 import time
 
 from config import Config
-from database import db_manager
 
 # Настройка для Windows
 if sys.platform == "win32":
@@ -83,6 +82,7 @@ class WebCrawler:
         self.session: Optional[aiohttp.ClientSession] = None
         self.job_id: Optional[int] = None
         self.progress_callback: Optional[Callable] = None
+        self.db_manager = None  # Будет установлен извне
 
         # Статистика
         self.stats = {
@@ -96,6 +96,10 @@ class WebCrawler:
 
         # Загрузка и парсинг robots.txt
         self._init_robots_parser()
+
+    def set_db_manager(self, db_manager):
+        """Установка менеджера базы данных"""
+        self.db_manager = db_manager
 
     def _init_robots_parser(self):
         """Инициализация парсера robots.txt"""
@@ -192,7 +196,10 @@ class WebCrawler:
                 # Задание уже создано
                 return self.job_id
 
-            job_id = db_manager.create_job(
+            if not self.db_manager:
+                raise Exception("DatabaseManager не установлен")
+
+            job_id = self.db_manager.create_job(
                 self.user_id,
                 self.job_name,
                 self.start_url,
@@ -209,8 +216,8 @@ class WebCrawler:
     async def update_job_status(self, status: str):
         """Обновление статуса задания"""
         try:
-            if self.job_id:
-                db_manager.update_job_status(self.job_id, status)
+            if self.job_id and self.db_manager:
+                self.db_manager.update_job_status(self.job_id, status)
                 logger.info(f"Обновлен статус задания {self.job_id} на {status}")
         except Exception as e:
             logger.error(f"Ошибка обновления статуса задания: {str(e)}")
@@ -225,7 +232,10 @@ class WebCrawler:
         }
 
         try:
-            page_id = db_manager.save_page(
+            if not self.db_manager:
+                raise Exception("DatabaseManager не установлен")
+
+            page_id = self.db_manager.save_page(
                 self.job_id,
                 url,
                 title,
@@ -246,7 +256,10 @@ class WebCrawler:
             return
 
         try:
-            db_manager.save_links(self.job_id, page_id, links, link_texts)
+            if not self.db_manager:
+                raise Exception("DatabaseManager не установлен")
+
+            self.db_manager.save_links(self.job_id, page_id, links, link_texts)
             logger.debug(f"Сохранено {len(links)} ссылок для страницы {page_id}")
             self.stats['links_found'] += len(links)
         except Exception as e:
@@ -676,6 +689,9 @@ class WebCrawler:
 async def main():
     """Точка входа в программу для тестирования"""
     try:
+        # Импортируем db_manager здесь, чтобы избежать циклического импорта
+        from database import db_manager
+
         # Создаем краулер с параметрами
         crawler = WebCrawler(
             job_name="Тест краулера - Википедия",
@@ -686,6 +702,9 @@ async def main():
             max_depth=2,  # Ограичение глубины обхода
             max_retries=3  # Количество попыток при ошибках
         )
+
+        # Устанавливаем менеджер базы данных
+        crawler.set_db_manager(db_manager)
 
         # Callback для отслеживания прогресса
         def progress_callback(**kwargs):

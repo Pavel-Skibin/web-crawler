@@ -62,6 +62,13 @@
         50% { opacity: 0.7; }
         100% { opacity: 1; }
     }
+
+    .export-section {
+        background: #f8f9fa;
+        border-radius: 0.375rem;
+        padding: 0.75rem;
+        border: 1px solid #dee2e6;
+    }
 </style>
 {% endblock %}
 
@@ -74,9 +81,17 @@
             <a href="{{ job.start_url }}" target="_blank" class="text-decoration-none">{{ job.start_url }}</a>
         </p>
     </div>
-    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left me-1"></i>Назад к списку
-    </a>
+    <div class="btn-group" role="group">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Назад к списку
+        </a>
+
+        <button type="button"
+                class="btn btn-outline-danger"
+                onclick="confirmDelete({{ job.id }}, '{{ job.job_name }}')">
+            <i class="bi bi-trash me-1"></i>Удалить задание
+        </button>
+    </div>
 </div>
 
 <!-- Карточка прогресса (показывается только для активных заданий) -->
@@ -196,6 +211,44 @@
                     </div>
                 </div>
 
+                <!-- Экспорт данных -->
+                <div class="mb-3">
+                    <strong>Экспорт данных:</strong>
+                    <div class="export-section mt-2">
+                        {% if job.status == 'completed' and job.pages_crawled and job.pages_crawled > 0 %}
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="previewExport()">
+                                <i class="bi bi-eye me-1"></i>Превью данных
+                            </button>
+                            <a href="{{ url_for('export_job_data', job_id=job.id) }}" class="btn btn-sm btn-success">
+                                <i class="bi bi-download me-1"></i>Скачать JSON
+                            </a>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Данные включают {{ job.pages_crawled }} страниц с метаданными и ссылками
+                            </small>
+                        </div>
+                        {% else %}
+                        <div class="text-center py-2">
+                            <i class="bi bi-download text-muted"></i>
+                            <p class="text-muted mb-0 mt-1">
+                                <small>
+                                    {% if job.status != 'completed' %}
+                                    Экспорт будет доступен после завершения задания
+                                    {% elif not job.pages_crawled or job.pages_crawled == 0 %}
+                                    Нет данных для экспорта - страницы не были собраны
+                                    {% else %}
+                                    Нет данных для экспорта
+                                    {% endif %}
+                                </small>
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
                 {% if job.username %}
                 <div class="mb-0">
                     <strong>Пользователь:</strong>
@@ -221,12 +274,13 @@
                     <table class="table table-hover table-sm">
                         <thead class="table-dark">
                             <tr>
-                                <th width="40%">URL</th>
+                                <th width="35%">URL</th>
                                 <th width="25%">Заголовок</th>
-                                <th width="10%">Глубина</th>
-                                <th width="10%">Статус</th>
-                                <th width="10%">Слов</th>
-                                <th width="15%">Время</th>
+                                <th width="8%">Глубина</th>
+                                <th width="8%">Статус</th>
+                                <th width="8%">Слов</th>
+                                <th width="8%">Ссылок</th>
+                                <th width="8%">Время</th>
                             </tr>
                         </thead>
                         <tbody id="pages-table">
@@ -237,39 +291,142 @@
                                        title="{{ page.url }}"
                                        class="text-decoration-none">
                                         <i class="bi bi-box-arrow-up-right me-1"></i>
-                                        {{ page.url[:40] }}{% if page.url|length > 40 %}...{% endif %}
+                                        {{ page.url[:35] }}{% if page.url|length > 35 %}...{% endif %}
                                     </a>
                                 </td>
                                 <td title="{{ page.title }}">
+                                    {% if page.title %}
                                     {{ page.title[:25] }}{% if page.title|length > 25 %}...{% endif %}
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     <span class="badge bg-info">{{ page.depth }}</span>
                                 </td>
                                 <td>
-                                    <span class="badge bg-{{ 'success' if page.status_code == 200 else 'warning' }}">
+                                    <span class="badge bg-{{ 'success' if page.status_code == 200 else 'warning' if page.status_code >= 300 and page.status_code < 400 else 'danger' }}">
                                         {{ page.status_code }}
                                     </span>
                                 </td>
-                                <td class="text-muted">{{ page.word_count or 0 }}</td>
-                                <td class="text-muted small">{{ page.crawled_at.strftime('%H:%M:%S') }}</td>
+                                <td class="text-muted">
+                                    {% if page.word_count %}
+                                    {{ "{:,}".format(page.word_count).replace(',', ' ') }}
+                                    {% else %}
+                                    0
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted">
+                                    {% if page.links_count %}
+                                    {{ page.links_count }}
+                                    {% else %}
+                                    0
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted small">
+                                    <span title="{{ page.crawled_at.strftime('%d.%m.%Y %H:%M:%S') }}">
+                                        {{ page.crawled_at.strftime('%H:%M:%S') }}
+                                    </span>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
+
+                {% if pages|length >= 100 %}
+                <div class="alert alert-info mt-3">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <small>Показаны первые 100 страниц. Полный список доступен в экспорте JSON.</small>
+                </div>
+                {% endif %}
+
                 {% else %}
                 <div class="text-center py-5">
                     <i class="bi bi-inbox display-4 text-muted"></i>
                     <p class="text-muted mt-3" id="no-pages-message">
                         {% if job.status == 'running' %}
-                        Краулер работает... Страницы появятся здесь по мере обработки.
+                        <span class="pulse">Краулер работает...</span><br>
+                        Страницы появятся здесь по мере обработки.
+                        {% elif job.status == 'failed' %}
+                        Задание завершилось с ошибкой.<br>
+                        Страницы не были собраны.
                         {% else %}
                         Пока нет собранных страниц
                         {% endif %}
                     </p>
+                    {% if job.status == 'running' %}
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Загрузка...</span>
+                    </div>
+                    {% endif %}
                 </div>
                 {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для превью экспорта -->
+<div class="modal fade" id="exportPreviewModal" tabindex="-1" aria-labelledby="exportPreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exportPreviewModalLabel">
+                    <i class="bi bi-eye me-2"></i>Предварительный просмотр экспорта
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <div id="export-preview-content">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Загрузка...</span>
+                        </div>
+                        <p class="mt-3 text-muted">Подготовка данных для экспорта...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i>Закрыть
+                </button>
+                <a href="{{ url_for('export_job_data', job_id=job.id) }}" class="btn btn-success">
+                    <i class="bi bi-download me-1"></i>Скачать JSON
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно подтверждения удаления -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteConfirmModalLabel">
+                    <i class="bi bi-exclamation-triangle text-danger me-2"></i>Подтверждение удаления
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Внимание!</strong> Это действие нельзя отменить.
+                </div>
+                <p>Вы действительно хотите удалить задание:</p>
+                <p><strong id="jobNameToDelete"></strong></p>
+                <p class="text-muted small">Будут удалены все собранные страницы, ссылки и метаданные.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i>Отмена
+                </button>
+                <form id="deleteJobForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i>Удалить задание
+                    </button>
+                </form>
             </div>
         </div>
     </div>
@@ -284,6 +441,7 @@ class JobProgressTracker {
         this.jobId = jobId;
         this.isJobActive = isJobActive;
         this.progressInterval = null;
+        this.timeInterval = null;
         this.startTime = null;
         this.elements = this.getElements();
 
@@ -336,7 +494,7 @@ class JobProgressTracker {
     }
 
     updateExecutionTime() {
-        if (this.startTime) {
+        if (this.startTime && this.elements.executionTime) {
             const now = new Date();
             const diff = now - this.startTime;
             const hours = Math.floor(diff / 3600000);
@@ -344,9 +502,7 @@ class JobProgressTracker {
             const seconds = Math.floor((diff % 60000) / 1000);
 
             const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            if (this.elements.executionTime) {
-                this.elements.executionTime.textContent = timeString;
-            }
+            this.elements.executionTime.textContent = timeString;
         }
     }
 
@@ -356,6 +512,7 @@ class JobProgressTracker {
             .then(data => {
                 if (data.error) {
                     console.error('Ошибка получения прогресса:', data.error);
+                    this.handleError('Ошибка получения прогресса: ' + data.error);
                     return;
                 }
 
@@ -367,7 +524,7 @@ class JobProgressTracker {
             })
             .catch(error => {
                 console.error('Ошибка запроса прогресса:', error);
-                this.handleError();
+                this.handleError('Ошибка соединения с сервером');
             });
     }
 
@@ -375,11 +532,11 @@ class JobProgressTracker {
         // Показываем карточку прогресса
         if (this.elements.progressCard) {
             this.elements.progressCard.style.display = 'block';
-            this.elements.progressCard.className = `card progress-card ${data.status}`;
+            this.elements.progressCard.className = `card progress-card ${data.status || 'running'}`;
         }
 
         // Обновляем прогресс-бар
-        const progress = Math.min(100, Math.max(0, data.progress));
+        const progress = Math.min(100, Math.max(0, data.progress || 0));
         if (this.elements.progressBar) {
             this.elements.progressBar.style.width = progress + '%';
             this.elements.progressBar.setAttribute('aria-valuenow', progress);
@@ -402,21 +559,21 @@ class JobProgressTracker {
             this.elements.currentUrl.textContent = data.current_url || 'Не указано';
         }
         if (this.elements.pagesProcessed) {
-            this.elements.pagesProcessed.textContent = data.pages_processed;
+            this.elements.pagesProcessed.textContent = data.pages_processed || 0;
         }
         if (this.elements.totalPages) {
-            this.elements.totalPages.textContent = data.total_pages;
+            this.elements.totalPages.textContent = data.total_pages || 0;
         }
         if (this.elements.lastUpdate) {
             this.elements.lastUpdate.textContent = data.updated_at || 'Только что';
         }
         if (this.elements.progressMessage) {
-            this.elements.progressMessage.textContent = data.message;
+            this.elements.progressMessage.textContent = data.message || 'Выполнение задания...';
         }
 
         // Обновляем статус задания в основной карточке
         if (this.elements.jobStatus) {
-            this.elements.jobStatus.textContent = data.status;
+            this.elements.jobStatus.textContent = data.status || 'running';
             this.elements.jobStatus.className = `badge ${this.getStatusBadgeClass(data.status)}`;
         }
 
@@ -434,8 +591,11 @@ class JobProgressTracker {
             }
             if (this.elements.progressTitle) {
                 this.elements.progressTitle.textContent = data.status === 'completed' ?
-                    'Задание завершено' : 'Задание завершено с ошибкой';
+                    'Задание завершено успешно' : 'Задание завершено с ошибкой';
             }
+
+            // Показываем уведомление о завершении
+            this.showCompletionNotification(data.status === 'completed');
 
             // Обновляем страницу через 3 секунды для загрузки результатов
             setTimeout(() => {
@@ -456,13 +616,35 @@ class JobProgressTracker {
         }
     }
 
-    handleError() {
+    handleError(message) {
         if (this.elements.progressMessage) {
-            this.elements.progressMessage.textContent = 'Ошибка получения данных о прогрессе';
+            this.elements.progressMessage.textContent = message;
         }
         if (this.elements.statusAlert) {
             this.elements.statusAlert.className = 'alert alert-danger mb-0';
         }
+    }
+
+    showCompletionNotification(isSuccess) {
+        // Создаем временное уведомление
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${isSuccess ? 'success' : 'danger'} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+        notification.innerHTML = `
+            <i class="bi bi-${isSuccess ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
+            <strong>Задание ${isSuccess ? 'завершено успешно' : 'завершено с ошибкой'}!</strong>
+            <br><small>Страница обновится через несколько секунд...</small>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+
+        document.body.appendChild(notification);
+
+        // Удаляем уведомление через 5 секунд
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 5000);
     }
 
     getStatusText(status) {
@@ -473,7 +655,7 @@ class JobProgressTracker {
             'completed': 'Завершено',
             'failed': 'Ошибка'
         };
-        return statusMap[status] || status;
+        return statusMap[status] || status || 'Неизвестно';
     }
 
     getStatusBadgeClass(status) {
@@ -499,10 +681,199 @@ class JobProgressTracker {
     }
 }
 
+// Функции для экспорта данных
+function previewExport() {
+    const modal = new bootstrap.Modal(document.getElementById('exportPreviewModal'));
+    const content = document.getElementById('export-preview-content');
+
+    // Показываем модальное окно с загрузкой
+    modal.show();
+
+    // Сбрасываем содержимое
+    content.innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+            <p class="mt-3 text-muted">Подготовка данных для экспорта...</p>
+        </div>
+    `;
+
+    // Запрашиваем превью данных
+    fetch(`/job/{{ job.id }}/export/preview`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                content.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Ошибка:</strong> ${data.error}
+                    </div>
+                `;
+                return;
+            }
+
+            // Отображаем превью
+            content.innerHTML = `
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card border-primary">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Информация о задании</h6>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-unstyled mb-0">
+                                    <li><strong>Название:</strong> ${data.job_info.name}</li>
+                                    <li><strong>Статус:</strong> <span class="badge bg-success">${data.job_info.status}</span></li>
+                                    <li><strong>Создано:</strong> ${new Date(data.job_info.created_at).toLocaleString('ru-RU')}</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-success">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Статистика данных</h6>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-unstyled mb-0">
+                                    <li><strong>Страниц:</strong> <span class="badge bg-primary">${data.job_info.total_pages}</span></li>
+                                    <li><strong>Ссылок:</strong> <span class="badge bg-info">${data.job_info.total_links}</span></li>
+                                    <li><strong>Размер файла:</strong> <span class="badge bg-warning text-dark">~${data.data_size_estimate}</span></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                ${data.sample_pages && data.sample_pages.length > 0 ? `
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-eye me-2"></i>Пример данных (первые 3 страницы)</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>URL</th>
+                                        <th>Заголовок</th>
+                                        <th>Статус</th>
+                                        <th>Слов</th>
+                                        <th>Ссылок</th>
+                                        <th>Глубина</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.sample_pages.map(page => `
+                                        <tr>
+                                            <td>
+                                                <a href="${page.url}" target="_blank" class="text-decoration-none" title="${page.url}">
+                                                    <i class="bi bi-box-arrow-up-right me-1"></i>
+                                                    ${page.url.length > 40 ? page.url.substring(0, 40) + '...' : page.url}
+                                                </a>
+                                            </td>
+                                            <td title="${page.title || ''}">
+                                                ${page.title ? (page.title.length > 30 ? page.title.substring(0, 30) + '...' : page.title) : '<span class="text-muted">-</span>'}
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-${page.status_code === 200 ? 'success' : (page.status_code >= 300 && page.status_code < 400) ? 'warning' : 'danger'}">
+                                                    ${page.status_code}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-dark">${page.content?.word_count || 0}</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-dark">${page.links?.length || 0}</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-info">${page.depth}</span>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                ` : '<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Нет данных для предварительного просмотра</div>'}
+
+                <div class="alert alert-light border mt-4">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h6><i class="bi bi-file-earmark-code me-2"></i>Структура JSON файла</h6>
+                            <ul class="mb-0 small">
+                                <li><strong>export_info</strong> - информация об экспорте (дата, пользователь, версия)</li>
+                                <li><strong>job_info</strong> - полная информация о задании и параметрах</li>
+                                <li><strong>crawled_data.pages</strong> - все собранные страницы с метаданными</li>
+                                <li><strong>crawled_data.links</strong> - граф всех найденных ссылок</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <i class="bi bi-download display-4 text-success"></i>
+                            <p class="small text-muted mt-2">Готов к скачиванию</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .catch(error => {
+            console.error('Ошибка получения превью:', error);
+            content.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Ошибка загрузки данных</strong><br>
+                    <small>Попробуйте обновить страницу или обратитесь к администратору</small>
+                </div>
+            `;
+        });
+}
+
+// Функция подтверждения удаления
+function confirmDelete(jobId, jobName) {
+    // Устанавливаем название задания в модальном окне
+    document.getElementById('jobNameToDelete').textContent = jobName;
+
+    // Устанавливаем action для формы
+    const deleteForm = document.getElementById('deleteJobForm');
+    deleteForm.action = `/job/${jobId}/delete`;
+
+    // Показываем модальное окно
+    const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+    modal.show();
+}
+
 // Инициализация отслеживания прогресса
 document.addEventListener('DOMContentLoaded', function() {
     const isJobActive = {{ 'true' if job.status == 'running' else 'false' }};
     const tracker = new JobProgressTracker({{ job.id }}, isJobActive);
+
+    // Обработка отправки формы удаления
+    const deleteForm = document.getElementById('deleteJobForm');
+    if (deleteForm) {
+        deleteForm.addEventListener('submit', function(e) {
+            const submitBtn = this.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Удаление...';
+                submitBtn.disabled = true;
+            }
+        });
+    }
+
+    // Добавляем обработчики для улучшения UX
+    const exportButtons = document.querySelectorAll('a[href*="export"]');
+    exportButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const icon = this.querySelector('i');
+            const originalClass = icon.className;
+            icon.className = 'bi bi-arrow-down-circle-fill me-1';
+
+            setTimeout(() => {
+                icon.className = originalClass;
+            }, 2000);
+        });
+    });
 });
 </script>
 {% endblock %}

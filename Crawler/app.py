@@ -1,9 +1,12 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
 import threading
 import asyncio
 import traceback
 from datetime import datetime
 import logging
+import json
+import tempfile
+import os
 
 from config import Config
 from database import db_manager
@@ -392,6 +395,236 @@ def get_active_jobs():
 
     return jsonify(filtered_jobs)
 
+
+@app.route('/job/<int:job_id>/export')
+@login_required
+def export_job_data(job_id):
+    """Экспорт данных задания в JSON"""
+    user = get_current_user()
+
+    # Проверяем права доступа к заданию
+    job = db_manager.get_job_details(job_id, user['id'] if user['role'] != 'admin' else None, user['role'] == 'admin')
+
+    if not job:
+        flash('Задание не найдено', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Проверяем, что задание завершено
+    if job['status'] != 'completed':
+        flash('Экспорт доступен только для завершенных заданий', 'warning')
+        return redirect(url_for('job_details', job_id=job_id))
+
+    # Получаем все данные для экспорта
+    try:
+        logger.info(f"Начинаем экспорт данных для задания {job_id}")
+        export_data = db_manager.get_job_export_data(job_id, user['id'] if user['role'] != 'admin' else None,
+                                                     user['role'] == 'admin')
+
+        if not export_data:
+            flash('Нет данных для экспорта', 'warning')
+            return redirect(url_for('job_details', job_id=job_id))
+
+        logger.info(f"Получены данные для экспорта: {len(export_data.get('pages', []))} страниц")
+
+        # Конвертируем datetime объекты в строки для job_info
+        job_info = {}
+        for key, value in export_data['job'].items():
+            if key in ['created_at', 'started_at', 'finished_at'] and value:
+                if hasattr(value, 'isoformat'):
+                    job_info[key] = value.isoformat()
+                else:
+                    job_info[key] = str(value)
+            else:
+                job_info[key] = value
+
+        # Формируем JSON структуру
+        json_data = {
+            "export_info": {
+                "exported_at": datetime.now().isoformat(),
+                "exported_by": user['username'],
+                "crawler_version": "1.0",
+                "job_id": job_id
+            },
+            "job_info": {
+                "id": job_info['id'],
+                "name": job_info['job_name'],
+                "start_url": job_info['start_url'],
+                "status": job_info['status'],
+                "created_at": job_info.get('created_at'),
+                "started_at": job_info.get('started_at'),
+                "finished_at": job_info.get('finished_at'),
+                "username": job_info.get('username'),
+                "parameters": {
+                    "max_pages": job_info['max_pages'],
+                    "max_depth": job_info['max_depth'],
+                    "delay": float(job_info['delay'])
+                },
+                "statistics": {
+                    "total_pages_crawled": len(export_data['pages']),
+                    "total_links_found": sum(len(page.get('links', [])) for page in export_data['pages']),
+                    "total_words": sum(page.get('content', {}).get('word_count', 0) for page in export_data['pages']),
+                    "average_words_per_page": round(
+                        sum(page.get('content', {}).get('word_count', 0) for page in export_data['pages']) / len(
+                            export_data['pages'])) if export_data['pages'] else 0
+                }
+            },
+            "crawled_data": {
+                "pages": export_data['pages'],
+                "links": export_data['links']
+            }
+        }
+
+        # Создаем временный файл
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as temp_file:
+            json.dump(json_data, temp_file, ensure_ascii=False, indent=2)
+            temp_file_path = temp_file.name
+
+        # Формируем имя файла для скачивания
+        safe_job_name = "".join(c for c in job['job_name'] if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        if not safe_job_name:
+            safe_job_name = "crawl_job"
+
+        filename = f"crawl_data_{safe_job_name}_{job_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+        logger.info(f"Экспорт завершен, файл: {filename}, размер: {os.path.getsize(temp_file_path)} bytes")
+
+        # Планируем удаление временного файла
+        def remove_temp_file():
+            try:
+                import time
+                time.sleep(30)  # Ждем 30 секунд перед удалением
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+                    logger.info(f"Временный файл {temp_file_path} удален")
+            except Exception as e:
+                logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {e}")
+
+        # Запускаем удаление в отдельном потоке
+        cleanup_thread = threading.Thread(target=remove_temp_file)
+        cleanup_thread.daemon = True
+        cleanup_thread.start()
+
+        return send_file(
+            temp_file_path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/json'
+        )
+
+    except Exception as e:
+        logger.error(f"Ошибка экспорта данных для задания {job_id}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        flash('Ошибка при экспорте данных. Попробуйте позже.', 'error')
+        return redirect(url_for('job_details', job_id=job_id))
+
+
+@app.route('/job/<int:job_id>/export/preview')
+@login_required
+def preview_export_data(job_id):
+    """Предварительный просмотр данных для экспорта"""
+    user = get_current_user()
+
+    # Проверяем права доступа к заданию
+    job = db_manager.get_job_details(job_id, user['id'] if user['role'] != 'admin' else None, user['role'] == 'admin')
+
+    if not job:
+        return jsonify({'error': 'Задание не найдено'}), 404
+
+    if job['status'] != 'completed':
+        return jsonify({'error': 'Превью доступно только для завершенных заданий'}), 400
+
+    try:
+        logger.info(f"Получение превью для задания {job_id}")
+        export_data = db_manager.get_job_export_data(job_id, user['id'] if user['role'] != 'admin' else None,
+                                                     user['role'] == 'admin')
+
+        if not export_data:
+            return jsonify({'error': 'Нет данных для экспорта'}), 404
+
+        # Безопасный расчет размера без сериализации datetime объектов
+        sample_data_for_size = {
+            "job": export_data['job'],
+            "pages_count": len(export_data['pages']),
+            "links_count": len(export_data['links']),
+            "sample_page": export_data['pages'][0] if export_data['pages'] else {}
+        }
+
+        try:
+            estimated_size_kb = len(json.dumps(sample_data_for_size, ensure_ascii=False)) / 1024
+            # Примерно умножаем на количество страниц для оценки
+            if export_data['pages']:
+                estimated_size_kb *= len(export_data['pages'])
+            data_size_estimate = f"{estimated_size_kb:.1f} KB"
+        except Exception as size_error:
+            logger.warning(f"Не удалось рассчитать размер файла: {size_error}")
+            data_size_estimate = "Не удалось определить"
+
+        # Обрабатываем created_at для отображения
+        created_at_str = None
+        if export_data['job'].get('created_at'):
+            if isinstance(export_data['job']['created_at'], str):
+                created_at_str = export_data['job']['created_at']
+            elif hasattr(export_data['job']['created_at'], 'isoformat'):
+                created_at_str = export_data['job']['created_at'].isoformat()
+            else:
+                created_at_str = str(export_data['job']['created_at'])
+
+        # Формируем превью (ограниченную версию)
+        preview_data = {
+            "job_info": {
+                "name": export_data['job']['job_name'],
+                "status": export_data['job']['status'],
+                "total_pages": len(export_data['pages']),
+                "total_links": sum(len(page.get('links', [])) for page in export_data['pages']),
+                "created_at": created_at_str
+            },
+            "sample_pages": export_data['pages'][:3] if export_data['pages'] else [],  # Только первые 3 страницы
+            "data_size_estimate": data_size_estimate
+        }
+
+        logger.info(f"Превью подготовлено для задания {job_id}")
+        return jsonify(preview_data)
+
+    except Exception as e:
+        logger.error(f"Ошибка предварительного просмотра для задания {job_id}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': 'Ошибка получения данных для превью'}), 500
+
+
+@app.route('/job/<int:job_id>/delete', methods=['POST'])
+@login_required
+def delete_job(job_id):
+    """Удаление задания"""
+    user = get_current_user()
+
+    # Проверяем права доступа к заданию
+    job = db_manager.get_job_details(job_id, user['id'] if user['role'] != 'admin' else None, user['role'] == 'admin')
+
+    if not job:
+        flash('Задание не найдено', 'error')
+        return redirect(url_for('dashboard'))
+
+    try:
+        # Удаляем задание
+        success = db_manager.delete_job(job_id, user['id'] if user['role'] != 'admin' else None,
+                                        user['role'] == 'admin')
+
+        if success:
+            flash(f'Задание "{job["job_name"]}" успешно удалено', 'success')
+            logger.info(f"Пользователь {user['username']} удалил задание {job_id}")
+        else:
+            flash('Ошибка при удалении задания', 'error')
+
+    except Exception as e:
+        logger.error(f"Ошибка удаления задания {job_id}: {e}")
+        flash('Ошибка при удалении задания', 'error')
+
+    return redirect(url_for('dashboard'))
 
 @app.errorhandler(404)
 def not_found_error(error):

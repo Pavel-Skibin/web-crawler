@@ -6,6 +6,10 @@ from typing import List, Dict, Optional, Tuple
 from config import Config
 import threading
 from contextlib import contextmanager
+import logging
+
+# Создаем собственный логгер для database.py
+logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
@@ -124,14 +128,14 @@ class DatabaseManager:
                     (username.lower(), password_hash, role)
                 )
 
-                print(f"Создан пользователь: {username} с ролью {role}")
+                logger.info(f"Создан пользователь: {username} с ролью {role}")
                 return True, "Пользователь успешно создан"
 
         except psycopg2.IntegrityError as e:
-            print(f"Ошибка целостности при создании пользователя: {e}")
+            logger.error(f"Ошибка целостности при создании пользователя: {e}")
             return False, "Пользователь с таким именем уже существует"
         except Exception as e:
-            print(f"Ошибка создания пользователя: {e}")
+            logger.error(f"Ошибка создания пользователя: {e}")
             return False, f"Ошибка создания пользователя: {str(e)}"
 
     def verify_user(self, username: str, password: str) -> Optional[Dict]:
@@ -143,23 +147,23 @@ class DatabaseManager:
             )
 
             if not user:
-                print(f"Пользователь {username} не найден")
+                logger.warning(f"Пользователь {username} не найден")
                 return None
 
             # Проверяем пароль
             if bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
-                print(f"Успешный вход пользователя: {username}")
+                logger.info(f"Успешный вход пользователя: {username}")
                 return {
                     'id': user['id'],
                     'username': user['username'],
                     'role': user['role']
                 }
             else:
-                print(f"Неверный пароль для пользователя: {username}")
+                logger.warning(f"Неверный пароль для пользователя: {username}")
                 return None
 
         except Exception as e:
-            print(f"Ошибка проверки пользователя: {e}")
+            logger.error(f"Ошибка проверки пользователя: {e}")
             return None
 
     def get_user_by_id(self, user_id: int) -> Optional[Dict]:
@@ -170,7 +174,7 @@ class DatabaseManager:
                 (user_id,)
             )
         except Exception as e:
-            print(f"Ошибка получения пользователя: {e}")
+            logger.error(f"Ошибка получения пользователя: {e}")
             return None
 
     def get_all_users(self) -> List[Dict]:
@@ -180,7 +184,7 @@ class DatabaseManager:
                 "SELECT id, username, role, created_at FROM users ORDER BY created_at DESC"
             )
         except Exception as e:
-            print(f"Ошибка получения пользователей: {e}")
+            logger.error(f"Ошибка получения пользователей: {e}")
             return []
 
     def delete_user(self, user_id: int) -> bool:
@@ -189,16 +193,16 @@ class DatabaseManager:
             # Проверяем, что это не администратор
             user = self.fetch_one("SELECT role FROM users WHERE id = %s", (user_id,))
             if user and user['role'] == 'admin':
-                print("Попытка удалить администратора")
+                logger.warning("Попытка удалить администратора")
                 return False
 
             result = self.execute_query("DELETE FROM users WHERE id = %s", (user_id,))
             return "DELETE 1" in result
         except Exception as e:
-            print(f"Ошибка удаления пользователя: {e}")
+            logger.error(f"Ошибка удаления пользователя: {e}")
             return False
 
-    # НЕДОСТАЮЩИЕ МЕТОДЫ ДЛЯ КРАУЛЕРА - ДОБАВЬТЕ ИХ!
+    # Методы для работы с заданиями краулера
     def create_job(self, user_id: int, job_name: str, start_url: str, max_pages: int,
                    max_depth: int, delay: float, status: str = 'running') -> int:
         """Создание нового задания на краулинг"""
@@ -213,10 +217,10 @@ class DatabaseManager:
                 """, (user_id, job_name, start_url, max_pages, max_depth, delay, status))
 
                 job_id = cursor.fetchone()[0]
-                print(f"Создано новое задание с ID: {job_id}")
+                logger.info(f"Создано новое задание с ID: {job_id}")
                 return job_id
         except Exception as e:
-            print(f"Ошибка создания задания: {e}")
+            logger.error(f"Ошибка создания задания: {e}")
             raise
 
     def update_job_status(self, job_id: int, status: str):
@@ -229,9 +233,9 @@ class DatabaseManager:
                     finished_at = CASE WHEN %s IN ('completed', 'failed') THEN NOW() ELSE finished_at END
                     WHERE id = %s
                 """, (status, status, job_id))
-                print(f"Обновлен статус задания {job_id} на {status}")
+                logger.info(f"Обновлен статус задания {job_id} на {status}")
         except Exception as e:
-            print(f"Ошибка обновления статуса задания: {e}")
+            logger.error(f"Ошибка обновления статуса задания: {e}")
 
     def save_page(self, job_id: int, url: str, title: str, depth: int, status_code: int,
                   metadata: dict, content: dict) -> int:
@@ -251,7 +255,7 @@ class DatabaseManager:
                 page_id = cursor.fetchone()[0]
                 return page_id
         except Exception as e:
-            print(f"Ошибка сохранения страницы {url}: {e}")
+            logger.error(f"Ошибка сохранения страницы {url}: {e}")
             raise
 
     def save_links(self, job_id: int, page_id: int, links: list, link_texts: dict = None):
@@ -276,9 +280,8 @@ class DatabaseManager:
                 """, insert_data)
 
         except Exception as e:
-            print(f"Ошибка сохранения ссылок: {e}")
+            logger.error(f"Ошибка сохранения ссылок: {e}")
 
-    # Методы для работы с заданиями (остальные остаются без изменений)
     def get_user_jobs(self, user_id: int) -> List[Dict]:
         """Получение заданий пользователя"""
         try:
@@ -290,7 +293,7 @@ class DatabaseManager:
                 ORDER BY created_at DESC
             """, (user_id,))
         except Exception as e:
-            print(f"Ошибка получения заданий пользователя: {e}")
+            logger.error(f"Ошибка получения заданий пользователя: {e}")
             return []
 
     def get_all_jobs(self) -> List[Dict]:
@@ -305,7 +308,7 @@ class DatabaseManager:
                 ORDER BY cj.created_at DESC
             """)
         except Exception as e:
-            print(f"Ошибка получения всех заданий: {e}")
+            logger.error(f"Ошибка получения всех заданий: {e}")
             return []
 
     def get_job_details(self, job_id: int, user_id: int = None, is_admin: bool = False) -> Optional[Dict]:
@@ -331,7 +334,7 @@ class DatabaseManager:
                     GROUP BY cj.id
                 """, (job_id, user_id))
         except Exception as e:
-            print(f"Ошибка получения деталей задания: {e}")
+            logger.error(f"Ошибка получения деталей задания: {e}")
             return None
 
     def get_job_pages(self, job_id: int, user_id: int = None, is_admin: bool = False) -> List[Dict]:
@@ -342,19 +345,247 @@ class DatabaseManager:
                 if not self.fetch_val("SELECT id FROM crawl_jobs WHERE id = %s AND user_id = %s", (job_id, user_id)):
                     return []
 
-            return self.fetch_all("""
-                SELECT id, url, title, depth, status_code, crawled_at,
-                       (metadata->>'headings') as headings_json,
-                       (content->>'word_count')::int as word_count
+            pages = self.fetch_all("""
+                SELECT id, url, title, depth, status_code, crawled_at, metadata, content
                 FROM crawled_pages 
                 WHERE job_id = %s 
                 ORDER BY crawled_at DESC
                 LIMIT 100
             """, (job_id,))
+
+            # Обрабатываем данные для отображения
+            processed_pages = []
+            for page in pages:
+                try:
+                    # Извлекаем word_count и links_count из content
+                    if isinstance(page['content'], str):
+                        content = json.loads(page['content']) if page['content'] else {}
+                    elif isinstance(page['content'], dict):
+                        content = page['content']
+                    else:
+                        content = {}
+
+                    # Подсчитываем количество ссылок для этой страницы
+                    links_count = self.fetch_val("""
+                        SELECT COUNT(*) FROM links WHERE job_id = %s AND from_page_id = %s
+                    """, (job_id, page['id'])) or 0
+
+                    processed_page = dict(page)
+                    processed_page['word_count'] = content.get('word_count', 0)
+                    processed_page['links_count'] = links_count
+                    processed_pages.append(processed_page)
+
+                except (json.JSONDecodeError, TypeError) as e:
+                    logger.error(f"Ошибка обработки данных страницы {page['id']}: {e}")
+                    # Добавляем страницу с базовыми данными
+                    processed_page = dict(page)
+                    processed_page['word_count'] = 0
+                    processed_page['links_count'] = 0
+                    processed_pages.append(processed_page)
+
+            return processed_pages
+
         except Exception as e:
-            print(f"Ошибка получения страниц задания: {e}")
+            logger.error(f"Ошибка получения страниц задания: {e}")
             return []
 
+    def get_job_export_data(self, job_id: int, user_id: int = None, is_admin: bool = False) -> Optional[Dict]:
+        """Получение полных данных задания для экспорта"""
+        try:
+            # Проверяем права доступа
+            if not is_admin and user_id:
+                job_check = self.fetch_val("SELECT id FROM crawl_jobs WHERE id = %s AND user_id = %s",
+                                           (job_id, user_id))
+                if not job_check:
+                    return None
+
+            # Получаем информацию о задании
+            if is_admin:
+                job = self.fetch_one("""
+                    SELECT cj.*, u.username
+                    FROM crawl_jobs cj
+                    JOIN users u ON cj.user_id = u.id
+                    WHERE cj.id = %s
+                """, (job_id,))
+            else:
+                job = self.fetch_one("""
+                    SELECT cj.*, u.username
+                    FROM crawl_jobs cj
+                    JOIN users u ON cj.user_id = u.id
+                    WHERE cj.id = %s AND cj.user_id = %s
+                """, (job_id, user_id))
+
+            if not job:
+                return None
+
+            # Конвертируем datetime объекты в строки для job
+            job_data = dict(job)
+            for field in ['created_at', 'started_at', 'finished_at']:
+                if job_data.get(field) and hasattr(job_data[field], 'isoformat'):
+                    job_data[field] = job_data[field].isoformat()
+
+            # Получаем все страницы с их данными
+            pages = self.fetch_all("""
+                SELECT 
+                    id,
+                    url,
+                    title,
+                    depth,
+                    status_code,
+                    metadata,
+                    content,
+                    crawled_at
+                FROM crawled_pages 
+                WHERE job_id = %s 
+                ORDER BY crawled_at ASC
+            """, (job_id,))
+
+            # Обрабатываем данные страниц
+            processed_pages = []
+            for page in pages:
+                try:
+                    # Обрабатываем JSON поля - проверяем тип данных
+                    if isinstance(page['metadata'], str):
+                        metadata = json.loads(page['metadata']) if page['metadata'] else {}
+                    elif isinstance(page['metadata'], dict):
+                        metadata = page['metadata']
+                    else:
+                        metadata = {}
+
+                    if isinstance(page['content'], str):
+                        content = json.loads(page['content']) if page['content'] else {}
+                    elif isinstance(page['content'], dict):
+                        content = page['content']
+                    else:
+                        content = {}
+
+                    # Получаем ссылки для этой страницы
+                    page_links = self.fetch_all("""
+                        SELECT to_url, link_text
+                        FROM links 
+                        WHERE job_id = %s AND from_page_id = %s
+                        ORDER BY id
+                    """, (job_id, page['id']))
+
+                    # Конвертируем datetime в строку
+                    crawled_at_str = None
+                    if page['crawled_at'] and hasattr(page['crawled_at'], 'isoformat'):
+                        crawled_at_str = page['crawled_at'].isoformat()
+                    elif page['crawled_at']:
+                        crawled_at_str = str(page['crawled_at'])
+
+                    processed_page = {
+                        "id": page['id'],
+                        "url": page['url'],
+                        "title": page['title'] or "",
+                        "depth": page['depth'],
+                        "status_code": page['status_code'],
+                        "crawled_at": crawled_at_str,
+                        "metadata": metadata,
+                        "content": content,
+                        "links": [
+                            {
+                                "url": link['to_url'],
+                                "text": link['link_text'] or ""
+                            }
+                            for link in page_links
+                        ]
+                    }
+                    processed_pages.append(processed_page)
+
+                except (json.JSONDecodeError, TypeError) as e:
+                    logger.error(f"Ошибка обработки данных для страницы {page['id']}: {e}")
+                    # Добавляем страницу с базовыми данными
+                    crawled_at_str = None
+                    if page['crawled_at'] and hasattr(page['crawled_at'], 'isoformat'):
+                        crawled_at_str = page['crawled_at'].isoformat()
+                    elif page['crawled_at']:
+                        crawled_at_str = str(page['crawled_at'])
+
+                    processed_pages.append({
+                        "id": page['id'],
+                        "url": page['url'],
+                        "title": page['title'] or "",
+                        "depth": page['depth'],
+                        "status_code": page['status_code'],
+                        "crawled_at": crawled_at_str,
+                        "metadata": {},
+                        "content": {
+                            "content_text": "",
+                            "word_count": 0,
+                            "char_count": 0,
+                            "links_count": 0,
+                            "images_count": 0,
+                            "forms_count": 0,
+                            "paragraphs_count": 0
+                        },
+                        "links": [],
+                        "error": f"Ошибка обработки данных: {str(e)}"
+                    })
+
+            # Получаем все ссылки задания (общий граф)
+            all_links = self.fetch_all("""
+                SELECT 
+                    cp.url as from_url,
+                    l.to_url,
+                    l.link_text,
+                    cp.depth as from_depth
+                FROM links l
+                JOIN crawled_pages cp ON l.from_page_id = cp.id
+                WHERE l.job_id = %s
+                ORDER BY cp.depth, cp.url, l.to_url
+            """, (job_id,))
+
+            return {
+                "job": job_data,  # Используем обработанные данные с конвертированными datetime
+                "pages": processed_pages,
+                "links": [dict(link) for link in all_links]
+            }
+
+        except Exception as e:
+            logger.error(f"Ошибка получения данных для экспорта задания {job_id}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return None
+
+    def delete_job(self, job_id: int, user_id: int = None, is_admin: bool = False) -> bool:
+        """Удаление задания и всех связанных данных"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                # Проверяем права доступа
+                if not is_admin and user_id:
+                    cursor.execute("SELECT user_id FROM crawl_jobs WHERE id = %s", (job_id,))
+                    job_owner = cursor.fetchone()
+                    if not job_owner or job_owner[0] != user_id:
+                        logger.warning(f"Попытка удаления чужого задания {job_id} пользователем {user_id}")
+                        return False
+
+                # Удаляем связанные данные в правильном порядке (из-за внешних ключей)
+
+                # 1. Удаляем ссылки
+                cursor.execute("DELETE FROM links WHERE job_id = %s", (job_id,))
+                links_deleted = cursor.rowcount
+
+                # 2. Удаляем страницы
+                cursor.execute("DELETE FROM crawled_pages WHERE job_id = %s", (job_id,))
+                pages_deleted = cursor.rowcount
+
+                # 3. Удаляем само задание
+                cursor.execute("DELETE FROM crawl_jobs WHERE id = %s", (job_id,))
+                job_deleted = cursor.rowcount
+
+                if job_deleted > 0:
+                    logger.info(f"Удалено задание {job_id}: {pages_deleted} страниц, {links_deleted} ссылок")
+                    return True
+                else:
+                    logger.warning(f"Задание {job_id} не найдено для удаления")
+                    return False
+
+        except Exception as e:
+            logger.error(f"Ошибка удаления задания {job_id}: {e}")
+            return False
 
 # Глобальный экземпляр менеджера базы данных
 db_manager = DatabaseManager()

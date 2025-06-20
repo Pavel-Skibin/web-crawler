@@ -169,10 +169,19 @@
                             </span>
                         </td>
                         <td>
-                            <a href="{{ url_for('job_details', job_id=job.id) }}"
-                               class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-eye me-1"></i>Детали
-                            </a>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('job_details', job_id=job.id) }}"
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye me-1"></i>Детали
+                                </a>
+
+                                <!-- Кнопка удаления -->
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-danger"
+                                        onclick="confirmDelete({{ job.id }}, '{{ job.job_name }}')">
+                                    <i class="bi bi-trash me-1"></i>Удалить
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -189,6 +198,39 @@
             </a>
         </div>
         {% endif %}
+    </div>
+</div>
+
+<!-- Модальное окно подтверждения удаления -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteConfirmModalLabel">
+                    <i class="bi bi-exclamation-triangle text-danger me-2"></i>Подтверждение удаления
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Внимание!</strong> Это действие нельзя отменить.
+                </div>
+                <p>Вы действительно хотите удалить задание:</p>
+                <p><strong id="jobNameToDelete"></strong></p>
+                <p class="text-muted small">Будут удалены все собранные страницы, ссылки и метаданные.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i>Отмена
+                </button>
+                <form id="deleteJobForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i>Удалить задание
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -289,8 +331,35 @@ class DashboardProgressTracker {
     }
 }
 
-// Инициализация трекера прогресса
+// Функция подтверждения удаления
+function confirmDelete(jobId, jobName) {
+    // Устанавливаем название задания в модальном окне
+    document.getElementById('jobNameToDelete').textContent = jobName;
+
+    // Устанавливаем action для формы
+    const deleteForm = document.getElementById('deleteJobForm');
+    deleteForm.action = `/job/${jobId}/delete`;
+
+    // Показываем модальное окно
+    const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+    modal.show();
+}
+
+// Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', function() {
+    // Обработка отправки формы удаления
+    const deleteForm = document.getElementById('deleteJobForm');
+    if (deleteForm) {
+        deleteForm.addEventListener('submit', function(e) {
+            const submitBtn = this.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Удаление...';
+                submitBtn.disabled = true;
+            }
+        });
+    }
+
+    // Инициализация трекера прогресса
     new DashboardProgressTracker();
 });
 </script>

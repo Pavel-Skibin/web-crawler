@@ -548,6 +548,31 @@ class DatabaseManager:
             logger.error(f"Traceback: {traceback.format_exc()}")
             return None
 
+    def update_user_role(self, user_id: int, new_role: str) -> bool:
+        """Изменение роли пользователя"""
+        try:
+            if new_role not in ['user', 'admin']:
+                logger.error(f"Недопустимая роль: {new_role}")
+                return False
+
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE users SET role = %s WHERE id = %s",
+                    (new_role, user_id)
+                )
+
+                if cursor.rowcount > 0:
+                    logger.info(f"Роль пользователя {user_id} изменена на {new_role}")
+                    return True
+                else:
+                    logger.warning(f"Пользователь {user_id} не найден для изменения роли")
+                    return False
+
+        except Exception as e:
+            logger.error(f"Ошибка изменения роли пользователя {user_id}: {e}")
+            return False
+
     def delete_job(self, job_id: int, user_id: int = None, is_admin: bool = False) -> bool:
         """Удаление задания и всех связанных данных"""
         try:

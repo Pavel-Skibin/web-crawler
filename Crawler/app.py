@@ -8,95 +8,70 @@ import json
 import tempfile
 import os
 
-from config import Config
 from database import db_manager
-from auth import login_required, get_current_user
 from crawler import WebCrawler
+from config import Config
 
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
+# Создание Flask приложения
 app = Flask(__name__)
-app.config.from_object(Config)
+app.secret_key = Config.SECRET_KEY
 
-# Глобальный словарь для отслеживания активных заданий
-active_jobs = {}
-
-
-def run_async_crawler(crawler, job_id):
-    """Запуск краулера в отдельном потоке с отслеживанием прогресса"""
-    logger.info(f"Запуск краулера в потоке: {threading.current_thread().name}")
-
-    # Добавляем задание в список активных
-    active_jobs[job_id] = {
-        'status': 'starting',
-        'progress': 0,
-        'current_url': crawler.start_url,
-        'pages_processed': 0,
-        'total_pages': crawler.max_pages,
-        'started_at': datetime.now(),
-        'message': 'Инициализация краулера...'
-    }
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        logger.info(f"Запуск crawl() для задания: {crawler.job_name}")
-
-        # Передаем callback для обновления прогресса
-        crawler.progress_callback = lambda **kwargs: update_job_progress(job_id, **kwargs)
-
-        result = loop.run_until_complete(crawler.crawl())
-        logger.info(f"Краулер завершен успешно, результат: {result}")
-
-        # Финальное обновление
-        active_jobs[job_id].update({
-            'status': 'completed',
-            'progress': 100,
-            'message': 'Краулинг завершен успешно!'
-        })
-
-    except Exception as e:
-        logger.error(f"Ошибка при выполнении краулинга: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-
-        # Обновляем статус на ошибку
-        if job_id in active_jobs:
-            active_jobs[job_id].update({
-                'status': 'failed',
-                'message': f'Ошибка: {str(e)}'
-            })
-
-    finally:
-        logger.info("Закрытие цикла событий")
-        loop.close()
-
-        # Удаляем из активных заданий через 5 минут
-        def cleanup_job():
-            import time
-            time.sleep(300)  # 5 минут
-            if job_id in active_jobs:
-                del active_jobs[job_id]
-
-        cleanup_thread = threading.Thread(target=cleanup_job)
-        cleanup_thread.daemon = True
-        cleanup_thread.start()
+# Глобальный словарь для отслеживания прогресса заданий
+job_progress = {}
 
 
-def update_job_progress(job_id, **kwargs):
-    """Обновление прогресса задания"""
-    if job_id in active_jobs:
-        active_jobs[job_id].update(kwargs)
-        active_jobs[job_id]['updated_at'] = datetime.now()
+def get_current_user():
+    """Получение текущего пользователя из сессии"""
+    if 'user_id' not in session:
+        return None
 
+    user = db_manager.get_user_by_id(session['user_id'])
+    return user
+
+
+def login_required(f):
+    """Декоратор для проверки авторизации"""
+
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Необходимо войти в систему', 'error')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+
+    decorated_function.__name__ = f.__name__
+    return decorated_function
+
+
+def admin_required(f):
+    """Декоратор для проверки прав администратора"""
+
+    def decorated_function(*args, **kwargs):
+        user = get_current_user()
+        if not user or user['role'] != 'admin':
+            flash('Недостаточно прав доступа', 'error')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+
+    decorated_function.__name__ = f.__name__
+    return decorated_function
+
+
+# Маршруты приложения
 
 @app.route('/')
 def index():
-    """Главная страница - редирект на dashboard или login"""
+    """Главная страница - перенаправление на dashboard"""
     if 'user_id' in session:
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
@@ -104,24 +79,22 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Страница входа"""
+    """Страница входа в систему"""
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
+
+        logger.info(f"Попытка входа: {username}")
 
         if not username or not password:
             flash('Введите имя пользователя и пароль', 'error')
             return render_template('login.html')
 
-        logger.info(f"Попытка входа: {username}")
         user = db_manager.verify_user(username, password)
-
         if user:
             session['user_id'] = user['id']
-            session['username'] = user['username']
-            session['role'] = user['role']
-            flash('Вход выполнен успешно!', 'success')
             logger.info(f"Успешный вход: {username} (ID: {user['id']}, роль: {user['role']})")
+            flash(f'Добро пожаловать, {user["username"]}!', 'success')
             return redirect(url_for('dashboard'))
         else:
             flash('Неверное имя пользователя или пароль', 'error')
@@ -129,29 +102,43 @@ def login():
     return render_template('login.html')
 
 
+@app.route('/logout')
+def logout():
+    """Выход из системы"""
+    if 'user_id' in session:
+        logger.info(f"Выход пользователя ID: {session['user_id']}")
+    session.clear()
+    flash('Вы успешно вышли из системы', 'info')
+    return redirect(url_for('login'))
+
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    """Страница регистрации"""
+    """Регистрация нового пользователя"""
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password', '')
 
+        logger.info(f"Попытка регистрации пользователя: {username}")
+
         if not username or not password:
-            flash('Введите имя пользователя и пароль', 'error')
+            flash('Заполните все поля', 'error')
+            return render_template('register.html')
+
+        if len(username) < 3:
+            flash('Имя пользователя должно содержать минимум 3 символа', 'error')
+            return render_template('register.html')
+
+        if len(password) < 4:
+            flash('Пароль должен содержать минимум 4 символа', 'error')
             return render_template('register.html')
 
         if password != confirm_password:
             flash('Пароли не совпадают', 'error')
             return render_template('register.html')
 
-        if len(password) < 6:
-            flash('Пароль должен содержать минимум 6 символов', 'error')
-            return render_template('register.html')
-
-        logger.info(f"Попытка регистрации пользователя: {username}")
         success, message = db_manager.create_user(username, password)
-
         if success:
             flash('Регистрация успешна! Теперь вы можете войти в систему.', 'success')
             return redirect(url_for('login'))
@@ -161,18 +148,10 @@ def register():
     return render_template('register.html')
 
 
-@app.route('/logout')
-def logout():
-    """Выход из системы"""
-    session.clear()
-    flash('Вы вышли из системы', 'info')
-    return redirect(url_for('login'))
-
-
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    """Панель управления пользователя"""
+    """Панель управления - список заданий"""
     user = get_current_user()
 
     if user['role'] == 'admin':
@@ -180,100 +159,70 @@ def dashboard():
     else:
         jobs = db_manager.get_user_jobs(user['id'])
 
+    # Добавляем информацию о количестве собранных страниц
+    for job in jobs:
+        if job.get('pages_crawled') is None:
+            pages_count = db_manager.fetch_val(
+                "SELECT COUNT(*) FROM crawled_pages WHERE job_id = %s",
+                (job['id'],)
+            )
+            job['pages_crawled'] = pages_count or 0
+
     return render_template('dashboard.html', jobs=jobs, user=user)
-
-
-@app.route('/admin')
-@login_required
-def admin_panel():
-    """Панель администратора"""
-    user = get_current_user()
-    if not user or user['role'] != 'admin':
-        flash('Недостаточно прав доступа', 'error')
-        return redirect(url_for('dashboard'))
-
-    users = db_manager.get_all_users()
-    jobs = db_manager.get_all_jobs()
-
-    return render_template('admin_panel.html', users=users, jobs=jobs)
-
-
-@app.route('/delete_user/<int:user_id>')
-@login_required
-def delete_user(user_id):
-    """Удаление пользователя (только для админа)"""
-    user = get_current_user()
-    if not user or user['role'] != 'admin':
-        flash('Недостаточно прав доступа', 'error')
-        return redirect(url_for('dashboard'))
-
-    success = db_manager.delete_user(user_id)
-    if success:
-        flash('Пользователь удален', 'success')
-    else:
-        flash('Ошибка удаления пользователя', 'error')
-
-    return redirect(url_for('admin_panel'))
 
 
 @app.route('/create_job', methods=['GET', 'POST'])
 @login_required
 def create_job():
-    """Создание нового задания краулера"""
+    """Создание нового задания на краулинг"""
     user = get_current_user()
     logger.info(f"create_job вызван пользователем: {user}")
 
     if request.method == 'POST':
         job_name = request.form.get('job_name', '').strip()
         start_url = request.form.get('start_url', '').strip()
-
         logger.info(f"Получены данные формы: job_name='{job_name}', start_url='{start_url}'")
 
-        if not job_name or not start_url:
-            flash('Введите название задания и URL', 'error')
-            limits = Config.USER_LIMITS if user['role'] != 'admin' else None
-            return render_template('create_job.html', user=user, limits=limits)
-
         try:
-            max_pages = int(request.form.get('max_pages', 20))
+            max_pages = int(request.form.get('max_pages', 10))
             max_depth = int(request.form.get('max_depth', 2))
-            delay = float(request.form.get('delay', 0.5))
+            delay = float(request.form.get('delay', 1.0))
             logger.info(f"Параметры: max_pages={max_pages}, max_depth={max_depth}, delay={delay}")
-        except ValueError as e:
-            logger.error(f"Ошибка в параметрах: {e}")
-            flash('Некорректные числовые значения', 'error')
-            limits = Config.USER_LIMITS if user['role'] != 'admin' else None
-            return render_template('create_job.html', user=user, limits=limits)
+        except (ValueError, TypeError) as e:
+            logger.error(f"Ошибка преобразования параметров: {e}")
+            flash('Ошибка в параметрах задания', 'error')
+            return render_template('create_job.html')
 
-        # Проверка ограничений для обычных пользователей
-        if user['role'] != 'admin':
-            limits = Config.USER_LIMITS
-            if max_pages > limits['max_pages_per_job']:
-                flash(f'Максимальное количество страниц: {limits["max_pages_per_job"]}', 'error')
-                return render_template('create_job.html', user=user, limits=limits)
+        if not job_name or not start_url:
+            flash('Необходимо заполнить все поля', 'error')
+            return render_template('create_job.html')
 
-            if max_depth > limits['max_depth']:
-                flash(f'Максимальная глубина: {limits["max_depth"]}', 'error')
-                return render_template('create_job.html', user=user, limits=limits)
+        # Валидация URL
+        if not start_url.startswith(('http://', 'https://')):
+            flash('URL должен начинаться с http:// или https://', 'error')
+            return render_template('create_job.html')
 
-            if delay < limits['min_delay']:
-                flash(f'Минимальная задержка: {limits["min_delay"]} сек', 'error')
-                return render_template('create_job.html', user=user, limits=limits)
+        # Валидация параметров
+        if max_pages < 1 or max_pages > 1000:
+            flash('Количество страниц должно быть от 1 до 1000', 'error')
+            return render_template('create_job.html')
 
-        # Сначала создаем запись в БД, чтобы получить ID
+        if max_depth < 1 or max_depth > 10:
+            flash('Глубина должна быть от 1 до 10', 'error')
+            return render_template('create_job.html')
+
+        if delay < 0 or delay > 10:
+            flash('Задержка должна быть от 0 до 10 секунд', 'error')
+            return render_template('create_job.html')
+
         try:
+            # Создаем запись в БД
             job_id = db_manager.create_job(
-                user['id'], job_name, start_url, max_pages, max_depth, delay, 'running'
+                user['id'], job_name, start_url, max_pages, max_depth, delay
             )
             logger.info(f"Создано задание с ID: {job_id}")
-        except Exception as e:
-            logger.error(f"Ошибка создания задания в БД: {e}")
-            flash('Ошибка создания задания в базе данных', 'error')
-            limits = Config.USER_LIMITS if user['role'] != 'admin' else None
-            return render_template('create_job.html', user=user, limits=limits)
 
-        # Создание краулера
-        try:
+            # Создаем краулер
             logger.info("Создание краулера...")
             crawler = WebCrawler(
                 job_name=job_name,
@@ -283,35 +232,82 @@ def create_job():
                 delay=delay,
                 max_depth=max_depth
             )
-            crawler.job_id = job_id  # Устанавливаем ID задания
+            crawler.job_id = job_id
+
+            # Устанавливаем db_manager для краулера
+            crawler.set_db_manager(db_manager)
+
             logger.info("Краулер создан успешно")
-        except Exception as e:
-            logger.error(f"Ошибка создания краулера: {e}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            flash('Ошибка создания краулера', 'error')
-            limits = Config.USER_LIMITS if user['role'] != 'admin' else None
-            return render_template('create_job.html', user=user, limits=limits)
 
-        # Запуск краулера в отдельном потоке
-        def run_crawler():
-            try:
+            # Запускаем краулер в отдельном потоке
+            logger.info("Создание потока для краулера...")
+
+            def run_crawler_thread():
                 logger.info("Запуск краулера в потоке...")
-                run_async_crawler(crawler, job_id)
-            except Exception as e:
-                logger.error(f"Ошибка при создании/запуске краулера: {e}")
-                logger.error(f"Traceback: {traceback.format_exc()}")
+                logger.info(f"Поток запущен: {threading.current_thread().name}")
 
-        logger.info("Создание потока для краулера...")
-        thread = threading.Thread(target=run_crawler)
-        thread.daemon = True
-        thread.start()
-        logger.info(f"Поток запущен: {thread.name}")
+                # Устанавливаем callback для отслеживания прогресса
+                def progress_callback(**kwargs):
+                    job_progress[job_id] = {
+                        'active': True,
+                        'job_id': job_id,
+                        'updated_at': datetime.now().strftime('%H:%M:%S'),
+                        **kwargs
+                    }
 
-        flash('Задание создано и запущено!', 'success')
-        return redirect(url_for('job_details', job_id=job_id))  # Сразу переходим к деталям
+                crawler.progress_callback = progress_callback
 
-    limits = Config.USER_LIMITS if user['role'] != 'admin' else None
-    return render_template('create_job.html', user=user, limits=limits)
+                # Создаем новый цикл событий для потока
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                try:
+                    # Запускаем краулинг
+                    result = loop.run_until_complete(crawler.crawl())
+                    logger.info(f"Краулер завершен успешно, результат: {result}")
+
+                    # Помечаем задание как неактивное
+                    if job_id in job_progress:
+                        job_progress[job_id]['active'] = False
+
+                except Exception as e:
+                    logger.error(f"Ошибка в краулере: {e}")
+                    import traceback
+                    logger.error(f"Traceback: {traceback.format_exc()}")
+
+                    # Обновляем статус на failed
+                    try:
+                        db_manager.update_job_status(job_id, 'failed')
+                    except Exception as update_error:
+                        logger.error(f"Ошибка обновления статуса: {update_error}")
+
+                    # Помечаем задание как неактивное с ошибкой
+                    if job_id in job_progress:
+                        job_progress[job_id].update({
+                            'active': False,
+                            'status': 'failed',
+                            'message': f'Ошибка: {str(e)}'
+                        })
+                finally:
+                    logger.info("Закрытие цикла событий")
+                    loop.close()
+
+            # Запускаем поток
+            thread = threading.Thread(target=run_crawler_thread, name=f"Crawler-{job_id}")
+            thread.daemon = True
+            thread.start()
+
+            flash(f'Задание "{job_name}" запущено!', 'success')
+            return redirect(url_for('job_details', job_id=job_id))
+
+        except Exception as e:
+            logger.error(f"Ошибка при создании задания: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            flash('Ошибка при создании задания', 'error')
+            return render_template('create_job.html')
+
+    return render_template('create_job.html')
 
 
 @app.route('/job/<int:job_id>')
@@ -320,80 +316,52 @@ def job_details(job_id):
     """Детали задания"""
     user = get_current_user()
 
+    # Получаем детали задания
     job = db_manager.get_job_details(job_id, user['id'] if user['role'] != 'admin' else None, user['role'] == 'admin')
 
     if not job:
         flash('Задание не найдено', 'error')
         return redirect(url_for('dashboard'))
 
+    # Получаем страницы задания
     pages = db_manager.get_job_pages(job_id, user['id'] if user['role'] != 'admin' else None, user['role'] == 'admin')
 
     return render_template('job_details.html', job=job, pages=pages, user=user)
 
 
-@app.route('/api/job/<int:job_id>/progress')
+@app.route('/job/<int:job_id>/delete', methods=['POST'])
 @login_required
-def get_job_progress(job_id):
-    """API для получения прогресса задания"""
+def delete_job(job_id):
+    """Удаление задания"""
     user = get_current_user()
 
-    # Проверяем права доступа
-    if user['role'] != 'admin':
-        job = db_manager.get_job_details(job_id, user['id'], False)
-        if not job:
-            return jsonify({'error': 'Задание не найдено'}), 404
+    # Проверяем права доступа к заданию
+    job = db_manager.get_job_details(job_id, user['id'] if user['role'] != 'admin' else None, user['role'] == 'admin')
 
-    # Получаем информацию о прогрессе
-    progress_info = active_jobs.get(job_id)
+    if not job:
+        flash('Задание не найдено', 'error')
+        return redirect(url_for('dashboard'))
 
-    if progress_info:
-        # Задание активно
-        return jsonify({
-            'active': True,
-            'status': progress_info['status'],
-            'progress': progress_info['progress'],
-            'current_url': progress_info.get('current_url', ''),
-            'pages_processed': progress_info.get('pages_processed', 0),
-            'total_pages': progress_info.get('total_pages', 0),
-            'message': progress_info.get('message', ''),
-            'started_at': progress_info['started_at'].strftime('%H:%M:%S') if progress_info.get('started_at') else '',
-            'updated_at': progress_info.get('updated_at', datetime.now()).strftime('%H:%M:%S')
-        })
-    else:
-        # Задание не активно, получаем статус из БД
-        job = db_manager.get_job_details(job_id, user['id'] if user['role'] != 'admin' else None,
-                                         user['role'] == 'admin')
-        if job:
-            return jsonify({
-                'active': False,
-                'status': job['status'],
-                'progress': 100 if job['status'] == 'completed' else 0,
-                'message': f"Статус: {job['status']}"
-            })
+    try:
+        # Удаляем задание
+        success = db_manager.delete_job(job_id, user['id'] if user['role'] != 'admin' else None,
+                                        user['role'] == 'admin')
+
+        if success:
+            flash(f'Задание "{job["job_name"]}" успешно удалено', 'success')
+            logger.info(f"Пользователь {user['username']} удалил задание {job_id}")
+
+            # Удаляем информацию о прогрессе, если есть
+            if job_id in job_progress:
+                del job_progress[job_id]
         else:
-            return jsonify({'error': 'Задание не найдено'}), 404
+            flash('Ошибка при удалении задания', 'error')
 
+    except Exception as e:
+        logger.error(f"Ошибка удаления задания {job_id}: {e}")
+        flash('Ошибка при удалении задания', 'error')
 
-@app.route('/api/jobs/active')
-@login_required
-def get_active_jobs():
-    """API для получения списка активных заданий"""
-    user = get_current_user()
-
-    # Фильтруем активные задания по пользователю (если не админ)
-    filtered_jobs = {}
-
-    for job_id, job_info in active_jobs.items():
-        # Проверяем права доступа к заданию
-        if user['role'] == 'admin':
-            filtered_jobs[job_id] = job_info
-        else:
-            # Проверяем, принадлежит ли задание пользователю
-            job_details = db_manager.get_job_details(job_id, user['id'], False)
-            if job_details:
-                filtered_jobs[job_id] = job_info
-
-    return jsonify(filtered_jobs)
+    return redirect(url_for('dashboard'))
 
 
 @app.route('/job/<int:job_id>/export')
@@ -475,9 +443,6 @@ def export_job_data(job_id):
         }
 
         # Создаем временный файл
-        import tempfile
-        import os
-
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as temp_file:
             json.dump(json_data, temp_file, ensure_ascii=False, indent=2)
             temp_file_path = temp_file.name
@@ -596,50 +561,156 @@ def preview_export_data(job_id):
         return jsonify({'error': 'Ошибка получения данных для превью'}), 500
 
 
-@app.route('/job/<int:job_id>/delete', methods=['POST'])
+# API для отслеживания прогресса
+@app.route('/api/job/<int:job_id>/progress')
 @login_required
-def delete_job(job_id):
-    """Удаление задания"""
+def get_job_progress(job_id):
+    """API для получения прогресса задания"""
     user = get_current_user()
 
     # Проверяем права доступа к заданию
     job = db_manager.get_job_details(job_id, user['id'] if user['role'] != 'admin' else None, user['role'] == 'admin')
 
     if not job:
-        flash('Задание не найдено', 'error')
-        return redirect(url_for('dashboard'))
+        return jsonify({'error': 'Задание не найдено'}), 404
+
+    # Проверяем, есть ли информация о прогрессе
+    if job_id in job_progress:
+        progress_data = job_progress[job_id].copy()
+        return jsonify(progress_data)
+
+    # Если нет активного прогресса, возвращаем статус из БД
+    return jsonify({
+        'active': False,
+        'job_id': job_id,
+        'status': job['status'],
+        'progress': 100 if job['status'] == 'completed' else 0,
+        'message': f'Задание {job["status"]}'
+    })
+
+
+# Административные маршруты
+@app.route('/admin')
+@login_required
+@admin_required
+def admin_panel():
+    """Административная панель"""
+    users = db_manager.get_all_users()
+    jobs = db_manager.get_all_jobs()
+
+    return render_template('admin_panel.html', users=users, jobs=jobs)
+
+
+@app.route('/admin/toggle_role/<int:user_id>', methods=['POST'])
+@login_required
+@admin_required
+def admin_toggle_role(user_id):
+    """Изменение роли пользователя (user <-> admin)"""
+    current_user = get_current_user()
+
+    if user_id == current_user['id']:
+        flash('Нельзя изменить свою собственную роль', 'error')
+        return redirect(url_for('admin_panel'))
+
+    user_to_change = db_manager.get_user_by_id(user_id)
+    if not user_to_change:
+        flash('Пользователь не найден', 'error')
+        return redirect(url_for('admin_panel'))
+
+    # Определяем новую роль
+    new_role = 'admin' if user_to_change['role'] == 'user' else 'user'
 
     try:
-        # Удаляем задание
-        success = db_manager.delete_job(job_id, user['id'] if user['role'] != 'admin' else None,
-                                        user['role'] == 'admin')
-
+        success = db_manager.update_user_role(user_id, new_role)
         if success:
-            flash(f'Задание "{job["job_name"]}" успешно удалено', 'success')
-            logger.info(f"Пользователь {user['username']} удалил задание {job_id}")
+            action = 'назначен администратором' if new_role == 'admin' else 'снят с должности администратора'
+            flash(f'Пользователь {user_to_change["username"]} {action}', 'success')
+            logger.info(
+                f"Администратор {current_user['username']} изменил роль пользователя {user_to_change['username']} на {new_role}")
         else:
-            flash('Ошибка при удалении задания', 'error')
-
+            flash('Ошибка изменения роли пользователя', 'error')
     except Exception as e:
-        logger.error(f"Ошибка удаления задания {job_id}: {e}")
-        flash('Ошибка при удалении задания', 'error')
+        logger.error(f"Ошибка изменения роли пользователя {user_id}: {e}")
+        flash('Ошибка изменения роли пользователя', 'error')
 
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('admin_panel'))
+@app.route('/admin/create_user', methods=['POST'])
+@login_required
+@admin_required
+def admin_create_user():
+    """Создание пользователя администратором"""
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '')
+    role = request.form.get('role', 'user')
 
+    if not username or not password:
+        flash('Заполните все поля', 'error')
+        return redirect(url_for('admin_panel'))
+
+    if role not in ['user', 'admin']:
+        flash('Неверная роль пользователя', 'error')
+        return redirect(url_for('admin_panel'))
+
+    success, message = db_manager.create_user(username, password, role)
+    if success:
+        flash(f'Пользователь {username} создан с ролью {role}', 'success')
+    else:
+        flash(message, 'error')
+
+    return redirect(url_for('admin_panel'))
+
+
+@app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
+@login_required
+@admin_required
+def admin_delete_user(user_id):
+    """Удаление пользователя администратором"""
+    current_user = get_current_user()
+
+    if user_id == current_user['id']:
+        flash('Нельзя удалить самого себя', 'error')
+        return redirect(url_for('admin_panel'))
+
+    user_to_delete = db_manager.get_user_by_id(user_id)
+    if not user_to_delete:
+        flash('Пользователь не найден', 'error')
+        return redirect(url_for('admin_panel'))
+
+    if user_to_delete['role'] == 'admin':
+        flash('Нельзя удалить администратора', 'error')
+        return redirect(url_for('admin_panel'))
+
+    success = db_manager.delete_user(user_id)
+    if success:
+        flash(f'Пользователь {user_to_delete["username"]} удален', 'success')
+    else:
+        flash('Ошибка удаления пользователя', 'error')
+
+    return redirect(url_for('admin_panel'))
+
+
+# Обработчики ошибок
 @app.errorhandler(404)
 def not_found_error(error):
-    """Обработчик ошибки 404"""
-    return render_template('404.html'), 404
+    return render_template('error.html', error_code=404, error_message='Страница не найдена'), 404
 
 
 @app.errorhandler(500)
 def internal_error(error):
-    """Обработчик ошибки 500"""
     logger.error(f"Внутренняя ошибка сервера: {error}")
-    return render_template('500.html'), 500
+    return render_template('error.html', error_code=500, error_message='Внутренняя ошибка сервера'), 500
 
 
 if __name__ == '__main__':
-    print("Запуск Flask-приложения...")
+    logger.info("Запуск Flask-приложения...")
+
+    try:
+        # Проверяем подключение к базе данных
+        test_user = db_manager.get_user_by_id(1)
+        logger.info("Подключение к базе данных успешно")
+    except Exception as e:
+        logger.error(f"Ошибка подключения к базе данных: {e}")
+        exit(1)
+
     logger.info("Flask-приложение запущено")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)

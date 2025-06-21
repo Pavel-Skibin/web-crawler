@@ -194,7 +194,6 @@
 
 
 /* Custom styles for the web crawler application */
-
 body {
     background-color: #f8f9fa;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -307,35 +306,14 @@ body {
     height: 1rem;
 }
 
-/* Custom animations */
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.fade-in {
-    animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
-.pulse {
-    animation: pulse 2s infinite;
-}
-
 /* Responsive utilities */
 @media (max-width: 768px) {
     .card-body {
         padding: 1rem;
     }
-
     .table-responsive {
         font-size: 0.875rem;
     }
-
     .btn {
         font-size: 0.875rem;
     }
@@ -346,65 +324,3 @@ footer {
     margin-top: auto;
 }
 
-/* Loading states */
-.loading {
-    pointer-events: none;
-    opacity: 0.6;
-}
-
-.loading::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 20px;
-    height: 20px;
-    margin: -10px 0 0 -10px;
-    border: 2px solid #ccc;
-    border-top: 2px solid #007bff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* Status indicators */
-.status-running {
-    position: relative;
-}
-
-.status-running::before {
-    content: '';
-    position: absolute;
-    top: -2px;
-    right: -2px;
-    width: 8px;
-    height: 8px;
-    background: #28a745;
-    border-radius: 50%;
-    animation: pulse 1.5s infinite;
-}
-
-/* Progress card specific styles */
-.progress-card {
-    border-left: 4px solid #007bff;
-    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-}
-
-.progress-card.running {
-    border-left-color: #ffc107;
-    background: linear-gradient(135deg, #fff9e6 0%, #ffffff 100%);
-}
-
-.progress-card.completed {
-    border-left-color: #28a745;
-    background: linear-gradient(135deg, #e8f5e8 0%, #ffffff 100%);
-}
-
-.progress-card.failed {
-    border-left-color: #dc3545;
-    background: linear-gradient(135deg, #fde8e8 0%, #ffffff 100%);
-}

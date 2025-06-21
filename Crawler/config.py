@@ -6,6 +6,7 @@ load_dotenv()
 
 class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-here')
+    DATABASE_URL = os.getenv('DATABASE_URL')
 
     # Конфигурация базы данных
     DATABASE_CONFIG = {
@@ -16,10 +17,3 @@ class Config:
         'port': int(os.getenv('DB_PORT', '5432'))
     }
 
-    # Ограничения для обычных пользователей
-    USER_LIMITS = {
-        'max_concurrent_jobs': 3,
-        'max_pages_per_job': 100,
-        'max_depth': 3,
-        'min_delay': 0.5
-    }

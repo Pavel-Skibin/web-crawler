@@ -7,3 +7,5 @@ python-dotenv==1.0.0
 bcrypt==4.1.2
 lxml==4.9.4
 asyncpg==0.29.0
+gunicorn==22.0.0
+dj-database-url==2.1.0

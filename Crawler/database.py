@@ -7,6 +7,7 @@ from config import Config
 import threading
 from contextlib import contextmanager
 import logging
+import dj_database_url
 
 # Создаем собственный логгер для database.py
 logger = logging.getLogger(__name__)
@@ -26,13 +27,25 @@ class DatabaseManager:
 
     def __init__(self):
         if not hasattr(self, '_initialized') or not self._initialized:
-            self.config = {
-                'dbname': Config.DATABASE_CONFIG['database'],
-                'user': Config.DATABASE_CONFIG['user'],
-                'password': Config.DATABASE_CONFIG['password'],
-                'host': Config.DATABASE_CONFIG['host'],
-                'port': Config.DATABASE_CONFIG['port']
-            }
+            if Config.DATABASE_URL:
+                # Используем DATABASE_URL если он есть (для Railway)
+                conn_info = dj_database_url.config(default=Config.DATABASE_URL)
+                self.config = {
+                    'dbname': conn_info['NAME'],
+                    'user': conn_info['USER'],
+                    'password': conn_info['PASSWORD'],
+                    'host': conn_info['HOST'],
+                    'port': conn_info['PORT']
+                }
+            else:
+                # Фоллбэк на старую конфигурацию (для локальной разработки)
+                self.config = {
+                    'dbname': Config.DATABASE_CONFIG['database'],
+                    'user': Config.DATABASE_CONFIG['user'],
+                    'password': Config.DATABASE_CONFIG['password'],
+                    'host': Config.DATABASE_CONFIG['host'],
+                    'port': Config.DATABASE_CONFIG['port']
+                }
             self._initialized = True
             self._create_default_admin()
 

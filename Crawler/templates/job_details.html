@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-
 {% block title %}{{ job.job_name }} - Детали задания{% endblock %}
-
+{% block head %}
+<link href="{{ url_for('static', filename='css/job-details.css') }}" rel="stylesheet">
+{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
@@ -15,16 +16,15 @@
         <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left me-1"></i>Назад к списку
         </a>
-
         <button type="button"
                 class="btn btn-outline-danger"
-                onclick="JobDetails.confirmDelete({{ job.id }}, '{{ job.job_name }}')">
+                onclick="confirmDelete({{ job.id }}, '{{ job.job_name }}')">
             <i class="bi bi-trash me-1"></i>Удалить задание
         </button>
     </div>
 </div>
-
-<div id="progress-card" class="card progress-card mb-4 d-none">
+<!-- Карточка прогресса (показывается только для активных заданий) -->
+<div id="progress-card" class="card progress-card mb-4" style="display: none;">
     <div class="card-header bg-transparent">
         <h5 class="mb-0">
             <span class="spinner-border spinner-border-sm spinner-custom me-2" id="progress-spinner"></span>
@@ -32,12 +32,13 @@
         </h5>
     </div>
     <div class="card-body">
+        <!-- Progress Bar -->
         <div class="mb-3">
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="fw-bold">Прогресс выполнения:</span>
                 <span id="progress-percentage" class="badge bg-primary">0%</span>
             </div>
-            <div class="progress job-progress-main">
+            <div class="progress" style="height: 20px;">
                 <div id="progress-bar"
                      class="progress-bar progress-bar-striped progress-bar-animated"
                      role="progressbar"
@@ -49,47 +50,44 @@
                 </div>
             </div>
         </div>
-
+        <!-- Status Information -->
         <div class="row">
             <div class="col-md-6">
                 <div class="mb-3">
                     <strong>Статус:</strong>
                     <span id="current-status" class="badge bg-warning">Инициализация</span>
                 </div>
-
                 <div class="mb-3">
                     <strong>Обработано страниц:</strong>
                     <span id="pages-processed" class="fw-bold text-primary">0</span> из
                     <span id="total-pages" class="fw-bold">0</span>
                 </div>
-
                 <div class="mb-3">
                     <strong>Время выполнения:</strong>
                     <span id="execution-time" class="fw-bold text-success">00:00:00</span>
                 </div>
             </div>
-
             <div class="col-md-6">
                 <div class="mb-3">
                     <strong>Последнее обновление:</strong>
                     <span id="last-update" class="text-muted">-</span>
                 </div>
-
                 <div class="mb-3">
                     <strong>Текущая страница:</strong>
                     <div id="current-url" class="current-url mt-1">Загрузка...</div>
                 </div>
             </div>
         </div>
-
+        <!-- Status Message -->
         <div class="alert alert-info mb-0" id="status-alert">
             <i class="bi bi-info-circle me-2"></i>
             <span id="progress-message">Инициализация краулера...</span>
         </div>
     </div>
 </div>
-
+<!-- Job Information and Results -->
 <div class="row">
+    <!-- Job Details -->
     <div class="col-md-4">
         <div class="card stats-card">
             <div class="card-header">
@@ -104,7 +102,6 @@
                         {{ job.status }}
                     </span>
                 </div>
-
                 <div class="mb-3">
                     <strong>Параметры краулинга:</strong>
                     <ul class="list-unstyled mt-2 ms-3">
@@ -113,7 +110,6 @@
                         <li><i class="bi bi-clock me-1"></i>Задержка: {{ job.delay }} сек</li>
                     </ul>
                 </div>
-
                 <div class="mb-3">
                     <strong>Временные метки:</strong>
                     <ul class="list-unstyled mt-2 ms-3 progress-info">
@@ -126,7 +122,6 @@
                         {% endif %}
                     </ul>
                 </div>
-
                 <div class="mb-3">
                     <strong>Результат:</strong>
                     <div class="mt-2">
@@ -134,13 +129,13 @@
                         <span class="text-muted ms-1">страниц собрано</span>
                     </div>
                 </div>
-
+                <!-- Экспорт данных -->
                 <div class="mb-3">
                     <strong>Экспорт данных:</strong>
                     <div class="export-section mt-2">
                         {% if job.status == 'completed' and job.pages_crawled and job.pages_crawled > 0 %}
                         <div class="d-grid gap-2">
-                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="JobDetails.previewExport()">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="previewExport()">
                                 <i class="bi bi-eye me-1"></i>Превью данных
                             </button>
                             <a href="{{ url_for('export_job_data', job_id=job.id) }}" class="btn btn-sm btn-success">
@@ -171,7 +166,6 @@
                         {% endif %}
                     </div>
                 </div>
-
                 {% if job.username %}
                 <div class="mb-0">
                     <strong>Пользователь:</strong>
@@ -181,7 +175,7 @@
             </div>
         </div>
     </div>
-
+    <!-- Crawled Pages -->
     <div class="col-md-8">
         <div class="card">
             <div class="card-header">
@@ -255,14 +249,12 @@
                         </tbody>
                     </table>
                 </div>
-
                 {% if pages|length >= 100 %}
                 <div class="alert alert-info mt-3">
                     <i class="bi bi-info-circle me-2"></i>
                     <small>Показаны первые 100 страниц. Полный список доступен в экспорте JSON.</small>
                 </div>
                 {% endif %}
-
                 {% else %}
                 <div class="text-center py-5">
                     <i class="bi bi-inbox display-4 text-muted"></i>
@@ -288,7 +280,7 @@
         </div>
     </div>
 </div>
-
+<!-- Модальное окно для превью экспорта -->
 <div class="modal fade" id="exportPreviewModal" tabindex="-1" aria-labelledby="exportPreviewModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
@@ -319,7 +311,7 @@
         </div>
     </div>
 </div>
-
+<!-- Модальное окно подтверждения удаления -->
 <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -342,7 +334,7 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <i class="bi bi-x-circle me-1"></i>Отмена
                 </button>
-                <form id="deleteJobForm" method="POST" class="d-inline">
+                <form id="deleteJobForm" method="POST" style="display: inline;">
                     <button type="submit" class="btn btn-danger">
                         <i class="bi bi-trash me-1"></i>Удалить задание
                     </button>
@@ -352,7 +344,193 @@
     </div>
 </div>
 {% endblock %}
-
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/job-details.js') }}"></script>
+<script src="{{ url_for('static', filename='js/job-tracker.js') }}"></script>
+<script>
+// Функции для экспорта данных
+function previewExport() {
+    const modal = new bootstrap.Modal(document.getElementById('exportPreviewModal'));
+    const content = document.getElementById('export-preview-content');
+    // Показываем модальное окно с загрузкой
+    modal.show();
+    // Сбрасываем содержимое
+    content.innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+            <p class="mt-3 text-muted">Подготовка данных для экспорта...</p>
+        </div>
+    `;
+    // Запрашиваем превью данных
+    fetch(`/job/{{ job.id }}/export/preview`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                content.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Ошибка:</strong> ${data.error}
+                    </div>
+                `;
+                return;
+            }
+            // Отображаем превью
+            content.innerHTML = `
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card border-primary">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Информация о задании</h6>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-unstyled mb-0">
+                                    <li><strong>Название:</strong> ${data.job_info.name}</li>
+                                    <li><strong>Статус:</strong> <span class="badge bg-success">${data.job_info.status}</span></li>
+                                    <li><strong>Создано:</strong> <span class="badge bg-success">${new Date(data.job_info.created_at).toLocaleString('ru-RU')}</span></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-success">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Статистика данных</h6>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-unstyled mb-0">
+                                    <li><strong>Страниц:</strong> <span class="badge bg-primary">${data.job_info.total_pages}</span></li>
+                                    <li><strong>Ссылок:</strong> <span class="badge bg-info">${data.job_info.total_links}</span></li>
+                                    <li><strong>Размер файла:</strong> <span class="badge bg-warning text-dark">~${data.data_size_estimate}</span></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                ${data.sample_pages && data.sample_pages.length > 0 ? `
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-eye me-2"></i>Пример данных (первые 3 страницы)</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>URL</th>
+                                        <th>Заголовок</th>
+                                        <th>Статус</th>
+                                        <th>Слов</th>
+                                        <th>Ссылок</th>
+                                        <th>Глубина</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.sample_pages.map(page => `
+                                        <tr>
+                                            <td>
+                                                <a href="${page.url}" target="_blank" class="text-decoration-none" title="${page.url}">
+                                                    <i class="bi bi-box-arrow-up-right me-1"></i>
+                                                    ${page.url.length > 40 ? page.url.substring(0, 40) + '...' : page.url}
+                                                </a>
+                                            </td>
+                                            <td title="${page.title || ''}">
+                                                ${page.title ? (page.title.length > 30 ? page.title.substring(0, 30) + '...' : page.title) : '<span class="text-muted">-</span>'}
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-${page.status_code === 200 ? 'success' : (page.status_code >= 300 && page.status_code < 400) ? 'warning' : 'danger'}">
+                                                    ${page.status_code}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-dark">${page.content?.word_count || 0}</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-dark">${page.links?.length || 0}</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-info">${page.depth}</span>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                ` : '<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Нет данных для предварительного просмотра</div>'}
+                <div class="alert alert-light border mt-4">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h6><i class="bi bi-file-earmark-code me-2"></i>Структура JSON файла</h6>
+                            <ul class="mb-0 small">
+                                <li><strong>export_info</strong> - информация об экспорте (дата, пользователь, версия)</li>
+                                <li><strong>job_info</strong> - полная информация о задании и параметрах</li>
+                                <li><strong>crawled_data.pages</strong> - все собранные страницы с метаданными</li>
+                                <li><strong>crawled_data.links</strong> - граф всех найденных ссылок</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <i class="bi bi-download display-4 text-success"></i>
+                            <p class="small text-muted mt-2">Готов к скачиванию</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .catch(error => {
+            console.error('Ошибка получения превью:', error);
+            content.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Ошибка загрузки данных</strong><br>
+                    <small>Попробуйте обновить страницу или обратитесь к администратору</small>
+                </div>
+            `;
+        });
+}
+
+// Функция подтверждения удаления
+function confirmDelete(jobId, jobName) {
+    // Устанавливаем название задания в модальном окне
+    document.getElementById('jobNameToDelete').textContent = jobName;
+    // Устанавливаем action для формы
+    const deleteForm = document.getElementById('deleteJobForm');
+    deleteForm.action = `/job/${jobId}/delete`;
+    // Показываем модальное окно
+    const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+    modal.show();
+}
+
+// Инициализация отслеживания прогресса
+document.addEventListener('DOMContentLoaded', function() {
+    const isJobActive = {{ 'true' if job.status == 'running' else 'false' }};
+    const tracker = new JobProgressTracker({{ job.id }}, isJobActive);
+
+    // Обработка отправки формы удаления
+    const deleteForm = document.getElementById('deleteJobForm');
+    if (deleteForm) {
+        deleteForm.addEventListener('submit', function(e) {
+            const submitBtn = this.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Удаление...';
+                submitBtn.disabled = true;
+            }
+        });
+    }
+
+    // Добавляем обработчики для улучшения UX
+    const exportButtons = document.querySelectorAll('a[href*="export"]');
+    exportButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const icon = this.querySelector('i');
+            const originalClass = icon.className;
+            icon.className = 'bi bi-arrow-down-circle-fill me-1';
+            setTimeout(() => {
+                icon.className = originalClass;
+            }, 2000);
+        });
+    });
+});
+</script>
 {% endblock %}

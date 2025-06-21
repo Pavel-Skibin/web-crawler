@@ -1,0 +1,65 @@
+.progress-card {
+    border-left: 4px solid #007bff;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.progress-card.running {
+    border-left-color: #ffc107;
+    background: linear-gradient(135deg, #fff9e6 0%, #ffffff 100%);
+}
+
+.progress-card.completed {
+    border-left-color: #28a745;
+    background: linear-gradient(135deg, #e8f5e8 0%, #ffffff 100%);
+}
+
+.progress-card.failed {
+    border-left-color: #dc3545;
+    background: linear-gradient(135deg, #fde8e8 0%, #ffffff 100%);
+}
+
+.spinner-custom {
+    width: 1.2rem;
+    height: 1.2rem;
+}
+
+.progress-info {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.current-url {
+    max-width: 100%;
+    word-break: break-all;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    background: #f8f9fa;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    border: 1px solid #dee2e6;
+}
+
+.stats-card {
+    transition: transform 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+}
+
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+.export-section {
+    background: #f8f9fa;
+    border-radius: 0.375rem;
+    padding: 0.75rem;
+    border: 1px solid #dee2e6;
+}

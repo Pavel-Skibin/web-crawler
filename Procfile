@@ -1,0 +1,1 @@
+web: gunicorn 'Crawler.app:app' --preload 

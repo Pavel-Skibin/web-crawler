@@ -167,32 +167,6 @@
     }
 }
 
-/* Dark theme support */
-@media (prefers-color-scheme: dark) {
-    .card {
-        background-color: #212529;
-        border-color: #495057;
-    }
-
-    .table {
-        --bs-table-bg: #212529;
-        --bs-table-color: #fff;
-    }
-
-    .export-section {
-        background: #343a40;
-        border-color: #495057;
-    }
-
-    .current-url {
-        background: #343a40;
-        border-color: #495057;
-        color: #fff;
-    }
-}
-
-
-
 /* Custom styles for the web crawler application */
 body {
     background-color: #f8f9fa;
